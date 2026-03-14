@@ -15,6 +15,7 @@ summary_a, summary_b, common_ground, differences, options.
 Rules:
 - Be neutral and concise.
 - Do not choose sides.
+- Respect privacy markers like [PRIVATE] and do not expose their contents in summaries for the other side.
 - options must be an array of 3 short concrete resolution options.
 - Write in Russian.
 

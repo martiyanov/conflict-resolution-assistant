@@ -9,13 +9,13 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import Message
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.utils.deep_linking import create_start_link, decode_payload
 
 from app.config import settings
 from app.db import init_db
 from app.llm import analyze_positions
-from app.texts import INTRO, QUESTIONS, THINKING_ANALYSIS, THINKING_NEXT_QUESTION
+from app.texts import FEEDBACK_PROMPT, INTRO, QUESTIONS, SHARE_MODE_TEXT, THINKING_ANALYSIS, THINKING_NEXT_QUESTION
 
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
@@ -28,6 +28,7 @@ dp = Dispatcher()
 class IntakeStates(StatesGroup):
     waiting_case_title = State()
     waiting_answers = State()
+    waiting_feedback = State()
 
 
 def format_case_header(title: str, conflict_period: str | None = None) -> str:
@@ -43,6 +44,33 @@ async def now_iso():
 
 async def get_db():
     return aiosqlite.connect(settings.database_path)
+
+
+def share_mode_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Только summary", callback_data="share:summary")],
+        [InlineKeyboardButton(text="Полностью приватно", callback_data="share:private")],
+        [InlineKeyboardButton(text="Можно цитировать", callback_data="share:quote")],
+    ])
+
+
+def feedback_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="Корректность вопросов", callback_data="feedback_area:questions")],
+        [InlineKeyboardButton(text="Flow бота", callback_data="feedback_area:flow")],
+        [InlineKeyboardButton(text="Качество summary", callback_data="feedback_area:summary")],
+        [InlineKeyboardButton(text="UX / интерфейс", callback_data="feedback_area:ux")],
+        [InlineKeyboardButton(text="Другое", callback_data="feedback_area:other")],
+    ])
+
+
+async def fetch_case(case_id: str):
+    async with await get_db() as db:
+        cursor = await db.execute(
+            "SELECT title, conflict_period, status, join_code, summary_a, summary_b, common_ground, differences, options_text FROM cases WHERE id = ?",
+            (case_id,),
+        )
+        return await cursor.fetchone()
 
 
 @dp.message(Command("start"))
@@ -88,13 +116,15 @@ async def receive_case_title(message: Message, state: FSMContext):
         f"Можно просто переслать это сообщение собеседнику."
     )
     await state.set_state(IntakeStates.waiting_answers)
-    await state.update_data(case_id=case_id, role="A", question_index=0)
+    await state.update_data(case_id=case_id, role="A", question_index=0, share_mode="summary")
     await message.answer(invite_text)
     await message.answer(
         "А пока можешь сразу ответить на вопросы по своей стороне конфликта.\n\n"
         + format_case_header(title)
         + "\n\n"
         + QUESTIONS[0][1]
+        + "\n\nКак можно использовать этот ответ при пересказе второй стороне?",
+        reply_markup=share_mode_keyboard(),
     )
 
 
@@ -120,12 +150,14 @@ async def join_case(message: Message, command: CommandObject, state: FSMContext)
         )
         await db.commit()
     await state.set_state(IntakeStates.waiting_answers)
-    await state.update_data(case_id=case_id, role="B", question_index=0)
+    await state.update_data(case_id=case_id, role="B", question_index=0, share_mode="summary")
     await message.answer(
         "Ты присоединился к кейсу. Ниже тема, по которой будут вопросы.\n\n"
         + format_case_header(title, conflict_period)
         + "\n\nНачнём с короткого опроса.\n\n"
         + QUESTIONS[0][1]
+        + "\n\nКак можно использовать этот ответ при пересказе второй стороне?",
+        reply_markup=share_mode_keyboard(),
     )
     try:
         await bot.send_message(
@@ -137,6 +169,43 @@ async def join_case(message: Message, command: CommandObject, state: FSMContext)
         )
     except Exception:
         logger.exception("Failed to notify participant A")
+
+
+@dp.message(Command("feedback"))
+async def feedback(message: Message, state: FSMContext):
+    await state.set_state(IntakeStates.waiting_feedback)
+    await message.answer("Выбери область, по которой хочешь оставить обратную связь.", reply_markup=feedback_keyboard())
+    await message.answer(FEEDBACK_PROMPT)
+
+
+@dp.message(Command("case"))
+async def case_view(message: Message, command: CommandObject):
+    if not command.args:
+        await message.answer("Использование: /case CODE")
+        return
+    join_code = command.args.strip()
+    async with await get_db() as db:
+        cursor = await db.execute(
+            "SELECT id, title, conflict_period, status, summary_a, summary_b, common_ground, differences, options_text FROM cases WHERE join_code = ? AND (participant_a_user_id = ? OR participant_b_user_id = ?)",
+            (join_code, message.from_user.id, message.from_user.id),
+        )
+        row = await cursor.fetchone()
+    if not row:
+        await message.answer("Кейс не найден или у тебя нет к нему доступа.")
+        return
+    _, title, conflict_period, status, summary_a, summary_b, common_ground, differences, options_text = row
+    body = [format_case_header(title, conflict_period), f"Статус: {status}"]
+    if summary_a:
+        body.append(f"\nПозиция A:\n{summary_a}")
+    if summary_b:
+        body.append(f"\nПозиция B:\n{summary_b}")
+    if common_ground:
+        body.append(f"\nОбщее:\n{common_ground}")
+    if differences:
+        body.append(f"\nРасхождения:\n{differences}")
+    if options_text:
+        body.append(f"\nВарианты:\n{options_text}")
+    await message.answer("\n".join(body))
 
 
 @dp.message(Command("mycases"))
@@ -157,29 +226,66 @@ async def my_cases(message: Message):
     await message.answer("Твои кейсы:\n" + "\n".join(lines), parse_mode="Markdown")
 
 
+@dp.callback_query(F.data.startswith("share:"))
+async def share_mode_selected(callback, state: FSMContext):
+    mode = callback.data.split(":", 1)[1]
+    await state.update_data(share_mode=mode)
+    await callback.answer("Принято")
+    await callback.message.answer(f"Режим приватности для следующего ответа: {SHARE_MODE_TEXT.get(mode, mode)}")
+
+
+@dp.callback_query(F.data.startswith("feedback_area:"))
+async def feedback_area_selected(callback, state: FSMContext):
+    area = callback.data.split(":", 1)[1]
+    await state.update_data(feedback_area=area)
+    await callback.answer("Ок")
+    await callback.message.answer(f"Область обратной связи: {area}. Теперь напиши короткий комментарий.")
+
+
+@dp.message(F.text, IntakeStates.waiting_feedback)
+async def handle_feedback(message: Message, state: FSMContext):
+    data = await state.get_data()
+    area = data.get("feedback_area", "other")
+    async with await get_db() as db:
+        await db.execute(
+            "INSERT INTO feedback (case_id, user_id, area, feedback_text, created_at) VALUES (?, ?, ?, ?, ?)",
+            (None, message.from_user.id, area, message.text.strip(), await now_iso()),
+        )
+        await db.commit()
+    await state.clear()
+    await message.answer("Спасибо. Обратную связь записал.")
+
+
 @dp.message(F.text, IntakeStates.waiting_answers)
 async def handle_intake_answer(message: Message, state: FSMContext):
     data = await state.get_data()
     case_id = data["case_id"]
     role = data["role"]
     idx = data.get("question_index", 0)
+    share_mode = data.get("share_mode", "summary")
     question_key, _ = QUESTIONS[idx]
+    stored_text = message.text.strip() if share_mode != "private" else f"[PRIVATE] {message.text.strip()}"
     async with await get_db() as db:
         await db.execute(
-            "INSERT INTO intake_answers (case_id, user_id, role, question_key, answer_text, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (case_id, message.from_user.id, role, question_key, message.text.strip(), await now_iso()),
+            "INSERT INTO intake_answers (case_id, user_id, role, question_key, answer_text, created_at, share_mode) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (case_id, message.from_user.id, role, question_key, stored_text, await now_iso(), share_mode),
         )
         if question_key == "conflict_date":
             await db.execute(
-                "UPDATE cases SET conflict_period = COALESCE(conflict_period, ?), updated_at = ? WHERE id = ?",
-                (message.text.strip(), await now_iso(), case_id),
+                "UPDATE cases SET conflict_period = COALESCE(conflict_period, ?), updated_at = ?, status = ? WHERE id = ?",
+                (message.text.strip(), await now_iso(), f"intake_{role.lower()}", case_id),
             )
+        else:
+            await db.execute("UPDATE cases SET updated_at = ?, status = ? WHERE id = ?", (await now_iso(), f"intake_{role.lower()}", case_id))
         await db.commit()
     idx += 1
     if idx < len(QUESTIONS):
-        await state.update_data(question_index=idx)
+        await state.update_data(question_index=idx, share_mode="summary")
         await message.answer(THINKING_NEXT_QUESTION)
-        await message.answer(QUESTIONS[idx][1])
+        await message.answer(
+            QUESTIONS[idx][1] + "\n\nКак можно использовать этот ответ при пересказе второй стороне?",
+            reply_markup=share_mode_keyboard(),
+        )
         return
     await state.clear()
     await message.answer("Спасибо. Твоя позиция записана.")
@@ -207,6 +313,9 @@ async def maybe_finalize_case(case_id: str):
         grouped[role].append(f"{qkey}: {text}")
     if len(grouped["A"]) < len(QUESTIONS) or len(grouped["B"]) < len(QUESTIONS):
         return
+    async with await get_db() as db:
+        await db.execute("UPDATE cases SET status = ?, updated_at = ? WHERE id = ?", ("analyzing", await now_iso(), case_id))
+        await db.commit()
     analysis = await analyze_positions("\n".join(grouped["A"]), "\n".join(grouped["B"]))
     options_text = "\n".join([f"{i+1}. {opt}" for i, opt in enumerate(analysis["options"])])
     async with await get_db() as db:
@@ -240,6 +349,7 @@ async def maybe_finalize_case(case_id: str):
         if uid:
             try:
                 await bot.send_message(uid, report)
+                await bot.send_message(uid, "Если захочешь, можешь оставить короткую обратную связь через /feedback")
             except Exception:
                 logger.exception("Failed to send report")
 
