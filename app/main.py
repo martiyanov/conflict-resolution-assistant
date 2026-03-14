@@ -111,16 +111,32 @@ async def human_status(user_id: int, status: str) -> str:
     return texts.get(f"status_{status}", status)
 
 
-async def discussion_actions_keyboard(user_id: int, join_code: str) -> InlineKeyboardMarkup:
+async def next_step_hint(user_id: int, status: str) -> str:
     texts = TEXTS[await get_lang(user_id)]
-    return InlineKeyboardMarkup(inline_keyboard=[
+    return texts.get(f"next_{status}", status)
+
+
+async def discussion_actions_keyboard(user_id: int, join_code: str, status: str | None = None) -> InlineKeyboardMarkup:
+    texts = TEXTS[await get_lang(user_id)]
+    rows = [
         [
             InlineKeyboardButton(text=texts["open_discussion"], callback_data=f"discussion:open:{join_code}"),
             InlineKeyboardButton(text=texts["discussion_invite"], callback_data=f"discussion:invite:{join_code}"),
-        ],
-        [
-            InlineKeyboardButton(text=texts["discussion_delete"], callback_data=f"discussion:delete:{join_code}"),
         ]
+    ]
+    if status in {"waiting_for_b", "intake", "intake_a", "intake_b", "continues", "analysis_ready"}:
+        rows.append([InlineKeyboardButton(text=texts["discussion_continue"], callback_data=f"discussion:continue:{join_code}")])
+    if status in {"analysis_ready", "resolved", "paused", "continues"}:
+        rows.append([InlineKeyboardButton(text=texts["discussion_feedback"], callback_data=f"discussion:feedback:{join_code}")])
+    rows.append([InlineKeyboardButton(text=texts["discussion_delete"], callback_data=f"discussion:delete:{join_code}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+async def delete_confirm_keyboard(user_id: int, join_code: str) -> InlineKeyboardMarkup:
+    texts = TEXTS[await get_lang(user_id)]
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=texts["delete_yes"], callback_data=f"discussion:delete_confirm:{join_code}")],
+        [InlineKeyboardButton(text=texts["delete_no"], callback_data=f"discussion:delete_cancel:{join_code}")],
     ])
 
 
@@ -179,7 +195,7 @@ async def main_menu_action(callback: CallbackQuery, state: FSMContext):
 
 
 @dp.callback_query(F.data.startswith("discussion:"))
-async def discussion_action(callback: CallbackQuery):
+async def discussion_action(callback: CallbackQuery, state: FSMContext):
     _, action, join_code = callback.data.split(":", 2)
     user_id = callback.from_user.id
     await callback.answer("OK")
@@ -207,7 +223,64 @@ async def discussion_action(callback: CallbackQuery):
         )
         await callback.message.answer(invite_text)
         return
+    if action == "continue":
+        async with await get_db() as db:
+            cursor = await db.execute(
+                "SELECT id, status, participant_a_user_id, participant_b_user_id, title, conflict_period FROM cases WHERE join_code = ? AND (participant_a_user_id = ? OR participant_b_user_id = ?)",
+                (join_code, user_id, user_id),
+            )
+            row = await cursor.fetchone()
+        if not row:
+            await callback.message.answer(await t(user_id, "case_access_denied"))
+            return
+        case_id, status, a_id, b_id, title, conflict_period = row
+        if status in {"analysis_ready", "continues"}:
+            await callback.message.answer(await t(user_id, "decision_prompt"), reply_markup=await decision_keyboard(user_id, case_id))
+            return
+        if status in {"waiting_for_b", "intake_b"} and user_id == a_id:
+            await callback.message.answer(await next_step_hint(user_id, status))
+            return
+        if status in {"intake", "intake_a"} and user_id == a_id:
+            questions = await get_questions(user_id)
+            async with await get_db() as db:
+                cursor = await db.execute("SELECT COUNT(*) FROM intake_answers WHERE case_id = ? AND user_id = ?", (case_id, user_id))
+                answered = (await cursor.fetchone())[0]
+            if answered < len(questions):
+                await state.set_state(IntakeStates.waiting_answers)
+                await state.update_data(case_id=case_id, role="A", question_index=answered, share_mode="summary")
+                await callback.message.answer(f"{await format_case_header(user_id, title, conflict_period)}\n\n{questions[answered][1]}")
+                return
+        if status in {"intake", "intake_b"} and user_id == b_id:
+            questions = await get_questions(user_id)
+            async with await get_db() as db:
+                cursor = await db.execute("SELECT COUNT(*) FROM intake_answers WHERE case_id = ? AND user_id = ?", (case_id, user_id))
+                answered = (await cursor.fetchone())[0]
+            if answered < len(questions):
+                await state.set_state(IntakeStates.waiting_answers)
+                await state.update_data(case_id=case_id, role="B", question_index=answered, share_mode="summary")
+                await callback.message.answer(f"{await format_case_header(user_id, title, conflict_period)}\n\n{questions[answered][1]}")
+                return
+        await callback.message.answer(await next_step_hint(user_id, status))
+        return
+    if action == "feedback":
+        await state.set_state(IntakeStates.waiting_feedback)
+        await state.update_data(feedback_case_code=join_code)
+        await callback.message.answer(await t(user_id, "feedback_choose"), reply_markup=await feedback_keyboard(user_id))
+        await callback.message.answer(await t(user_id, "feedback_prompt"))
+        return
     if action == "delete":
+        async with await get_db() as db:
+            cursor = await db.execute(
+                "SELECT id FROM cases WHERE join_code = ? AND creator_user_id = ?",
+                (join_code, user_id),
+            )
+            row = await cursor.fetchone()
+        if not row:
+            await callback.message.answer(await t(user_id, "case_access_denied"))
+            return
+        await callback.message.answer(await t(user_id, "delete_confirm"), reply_markup=await delete_confirm_keyboard(user_id, join_code))
+        return
+    if action == "delete_confirm":
         async with await get_db() as db:
             cursor = await db.execute(
                 "SELECT id FROM cases WHERE join_code = ? AND creator_user_id = ?",
@@ -224,6 +297,9 @@ async def discussion_action(callback: CallbackQuery):
             await db.execute("DELETE FROM cases WHERE id = ?", (case_id,))
             await db.commit()
         await callback.message.answer(await t(user_id, "discussion_deleted"))
+        return
+    if action == "delete_cancel":
+        await callback.message.answer(await t(user_id, "outside_text"))
 
 
 @dp.callback_query(F.data.startswith("decision:"))
@@ -377,7 +453,11 @@ async def case_view(message: Message, command: CommandObject, user_id: int | Non
         return
     title, conflict_period, status, summary_a, summary_b, common_ground, differences, options_text = row
     texts = TEXTS[await get_lang(user_id)]
-    body = [await format_case_header(user_id, title, conflict_period), f"{texts['status']}: {await human_status(user_id, status)}"]
+    body = [
+        await format_case_header(user_id, title, conflict_period),
+        f"{texts['status']}: {await human_status(user_id, status)}",
+        f"{texts['next_step']}: {await next_step_hint(user_id, status)}",
+    ]
     if summary_a:
         body.append(f"\n{texts['side_a']}:\n{summary_a}")
     if summary_b:
@@ -388,7 +468,7 @@ async def case_view(message: Message, command: CommandObject, user_id: int | Non
         body.append(f"\n{texts['differences']}:\n{differences}")
     if options_text:
         body.append(f"\n{texts['options']}:\n{options_text}")
-    await message.answer("\n".join(body), reply_markup=await discussion_actions_keyboard(user_id, join_code))
+    await message.answer("\n".join(body), reply_markup=await discussion_actions_keyboard(user_id, join_code, status))
 
 
 @dp.message(Command("mycases"))
@@ -407,7 +487,7 @@ async def my_cases(message: Message, user_id: int | None = None):
             f"{await t(user_id, 'status')}: {await human_status(user_id, status)}\n"
             f"{await t(user_id, 'code_label')}: `{code}`"
         )
-        await message.answer(text, parse_mode="Markdown", reply_markup=await discussion_actions_keyboard(user_id, code))
+        await message.answer(text, parse_mode="Markdown", reply_markup=await discussion_actions_keyboard(user_id, code, status))
 
 
 @dp.callback_query(F.data.startswith("feedback_area:"))
@@ -423,9 +503,18 @@ async def feedback_area_selected(callback: CallbackQuery, state: FSMContext):
 async def handle_feedback(message: Message, state: FSMContext):
     data = await state.get_data()
     area = data.get("feedback_area", "other")
+    join_code = data.get("feedback_case_code")
     feedback_text = message.text.strip()
+    case_id = None
+    case_title = None
+    if join_code:
+        async with await get_db() as db:
+            cursor = await db.execute("SELECT id, title FROM cases WHERE join_code = ?", (join_code,))
+            row = await cursor.fetchone()
+            if row:
+                case_id, case_title = row
     async with await get_db() as db:
-        await db.execute("INSERT INTO feedback (case_id, user_id, area, feedback_text, created_at) VALUES (?, ?, ?, ?, ?)", (None, message.from_user.id, area, feedback_text, await now_iso()))
+        await db.execute("INSERT INTO feedback (case_id, user_id, area, feedback_text, created_at) VALUES (?, ?, ?, ?, ?)", (case_id, message.from_user.id, area, feedback_text, await now_iso()))
         await db.commit()
     await state.clear()
     await message.answer(await t(message.from_user.id, "feedback_saved"))
@@ -436,7 +525,8 @@ async def handle_feedback(message: Message, state: FSMContext):
                 "Новый отзыв о боте\n\n"
                 f"От пользователя: {message.from_user.id}\n"
                 f"Область: {area_label}\n"
-                f"Текст: {feedback_text}"
+                + (f"Обсуждение: {case_title} ({join_code})\n" if case_title and join_code else "")
+                + f"Текст: {feedback_text}"
             )
             await bot.send_message(settings.owner_telegram_id, owner_text)
         except Exception:
