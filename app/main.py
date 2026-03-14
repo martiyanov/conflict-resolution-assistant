@@ -85,16 +85,6 @@ def main_menu_keyboard(texts: dict) -> InlineKeyboardMarkup:
     ])
 
 
-async def share_mode_keyboard(user_id: int) -> InlineKeyboardMarkup:
-    lang = await get_lang(user_id)
-    texts = TEXTS[lang]
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=texts["share_mode_summary"], callback_data="share:summary")],
-        [InlineKeyboardButton(text=texts["share_mode_private"], callback_data="share:private")],
-        [InlineKeyboardButton(text=texts["share_mode_quote"], callback_data="share:quote")],
-    ])
-
-
 async def feedback_keyboard(user_id: int) -> InlineKeyboardMarkup:
     lang = await get_lang(user_id)
     areas = TEXTS[lang]["feedback_areas"]
@@ -291,8 +281,7 @@ async def receive_case_title(message: Message, state: FSMContext):
     await message.answer(
         f"{await t(message.from_user.id, 'your_side_intro')}\n\n"
         f"{await format_case_header(message.from_user.id, title)}\n\n"
-        f"{questions[0][1]}\n\n{await t(message.from_user.id, 'share_prompt')}",
-        reply_markup=await share_mode_keyboard(message.from_user.id),
+        f"{questions[0][1]}"
     )
 
 
@@ -321,8 +310,7 @@ async def join_case(message: Message, command: CommandObject, state: FSMContext)
         f"{await t(message.from_user.id, 'joined_intro')}\n\n"
         f"{await format_case_header(message.from_user.id, title, conflict_period)}\n\n"
         f"{await t(message.from_user.id, 'start_questions')}\n\n"
-        f"{questions[0][1]}\n\n{await t(message.from_user.id, 'share_prompt')}",
-        reply_markup=await share_mode_keyboard(message.from_user.id),
+        f"{questions[0][1]}"
     )
     try:
         a_lang = await get_lang(participant_a_user_id)
@@ -396,20 +384,6 @@ async def my_cases(message: Message, user_id: int | None = None):
         await message.answer(text, parse_mode="Markdown", reply_markup=await discussion_actions_keyboard(user_id, code))
 
 
-@dp.callback_query(F.data.startswith("share:"))
-async def share_mode_selected(callback: CallbackQuery, state: FSMContext):
-    mode = callback.data.split(":", 1)[1]
-    await state.update_data(share_mode=mode)
-    texts = TEXTS[await get_lang(callback.from_user.id)]
-    mapping = {
-        "summary": texts["share_mode_summary"],
-        "private": texts["share_mode_private"],
-        "quote": texts["share_mode_quote"],
-    }
-    await callback.answer("OK")
-    await callback.message.answer(f"{texts['share_mode_selected']} {mapping.get(mode, mode)}")
-
-
 @dp.callback_query(F.data.startswith("feedback_area:"))
 async def feedback_area_selected(callback: CallbackQuery, state: FSMContext):
     area = callback.data.split(":", 1)[1]
@@ -455,10 +429,7 @@ async def handle_intake_answer(message: Message, state: FSMContext):
     if idx < len(questions):
         await state.update_data(question_index=idx, share_mode="summary")
         await message.answer(await t(user_id, "thinking_next"))
-        await message.answer(
-            f"{questions[idx][1]}\n\n{await t(user_id, 'share_prompt')}",
-            reply_markup=await share_mode_keyboard(user_id),
-        )
+        await message.answer(f"{questions[idx][1]}")
         return
     await state.clear()
     await message.answer(await t(user_id, "position_saved"))
