@@ -6,7 +6,7 @@ from datetime import datetime, UTC
 
 import aiosqlite
 from aiogram import Bot, Dispatcher, F
-from aiogram.filters import Command, CommandObject
+from aiogram.filters import Command, CommandObject, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
@@ -258,7 +258,7 @@ async def decision_action(callback: CallbackQuery):
                 logger.exception("Failed to send decision result")
 
 
-@dp.message(Command("start"))
+@dp.message(StateFilter('*'), Command("start"))
 async def start(message: Message, state: FSMContext, command: CommandObject):
     await state.clear()
     if command.args:
@@ -271,7 +271,7 @@ async def start(message: Message, state: FSMContext, command: CommandObject):
     await message.answer(await t("intro"), reply_markup=main_menu_keyboard())
 
 
-@dp.message(Command("newcase"))
+@dp.message(StateFilter('*'), Command("newcase"))
 async def new_case(message: Message, state: FSMContext):
     await state.clear()
     await state.set_state(IntakeStates.waiting_case_title)
@@ -296,7 +296,7 @@ async def receive_case_title(message: Message, state: FSMContext):
     await message.answer(f"{await t('your_side_intro')}\n\n{format_case_header(title)}\n\n{questions[0][1]}")
 
 
-@dp.message(Command("join"))
+@dp.message(StateFilter('*'), Command("join"))
 async def join_case(message: Message, command: CommandObject, state: FSMContext):
     if not command.args:
         await message.answer(await t("join_usage"))
@@ -324,14 +324,14 @@ async def join_case(message: Message, command: CommandObject, state: FSMContext)
         logger.exception("Failed to notify participant A")
 
 
-@dp.message(Command("feedback"))
+@dp.message(StateFilter('*'), Command("feedback"))
 async def feedback(message: Message, state: FSMContext):
     await state.set_state(IntakeStates.waiting_feedback)
     await state.update_data(feedback_area="other")
     await message.answer(await t("feedback_prompt"))
 
 
-@dp.message(Command("case"))
+@dp.message(StateFilter('*'), Command("case"))
 async def case_view(message: Message, command: CommandObject, user_id: int | None = None):
     user_id = user_id or message.from_user.id
     if not command.args:
@@ -355,7 +355,7 @@ async def case_view(message: Message, command: CommandObject, user_id: int | Non
     await message.answer("\n".join(body), reply_markup=discussion_actions_keyboard(join_code, status))
 
 
-@dp.message(Command("mycases"))
+@dp.message(StateFilter('*'), Command("mycases"))
 async def my_cases(message: Message, user_id: int | None = None):
     user_id = user_id or message.from_user.id
     async with await get_db() as db:
