@@ -12,7 +12,7 @@ TEXTS = {
         "join_usage": "Использование: /join CODE",
         "case_not_found": "Обсуждение с таким кодом не найдено.",
         "case_already_joined": "К этому обсуждению уже присоединился второй участник.",
-        "joined_intro": "Ты присоединился к кейсу. Ниже тема, по которой будут вопросы.",
+        "joined_intro": "Ты присоединился к обсуждению. Ниже тема, по которой будут вопросы.",
         "start_questions": "Начнём с короткого опроса.",
         "participant_joined": "Второй участник присоединился. Теперь можно продолжать по теме:",
         "answer_questions": "Ответь на вопросы.",
@@ -69,6 +69,7 @@ TEXTS = {
         "menu_language": "Сменить язык",
         "open_discussion": "Открыть",
         "discussion_invite": "Приглашение",
+        "code_label": "Код",
         "outside_text": "Сейчас я не жду обычный ответ. Выбери действие в меню или используй команду.\n\n/newcase — создать новое обсуждение\n/mycases — посмотреть мои обсуждения\n/feedback — оставить отзыв\n/start — открыть главное меню",
     },
     "en": {
@@ -139,6 +140,7 @@ TEXTS = {
         "menu_language": "Change language",
         "open_discussion": "Open",
         "discussion_invite": "Invite",
+        "code_label": "Code",
         "outside_text": "I am not waiting for a regular text right now. Choose an action from the menu or use a command.\n\n/newcase — create a new discussion\n/mycases — list your discussions\n/feedback — leave feedback\n/start — open the main menu",
     },
 }

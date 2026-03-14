@@ -328,7 +328,7 @@ async def my_cases(message: Message):
         text = (
             f"{await format_case_header(message.from_user.id, title, conflict_period)}\n"
             f"{await t(message.from_user.id, 'status')}: {await human_status(message.from_user.id, status)}\n"
-            f"Код: `{code}`"
+            f"{await t(message.from_user.id, 'code_label')}: `{code}`"
         )
         await message.answer(text, parse_mode="Markdown", reply_markup=await discussion_actions_keyboard(message.from_user.id, code))
 
