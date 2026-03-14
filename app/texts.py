@@ -1,38 +1,118 @@
-INTRO = (
-    "Я нейтральный бот-медиатор. Помогаю двум людям спокойно разложить конфликт, "
-    "увидеть общие точки и получить первые варианты решения.\n\n"
-    "Команды:\n"
-    "/newcase — создать новый кейс\n"
-    "/join CODE — присоединиться к кейсу\n"
-    "/mycases — посмотреть мои кейсы\n"
-    "/case CODE — посмотреть конкретный кейс\n"
-    "/feedback — оставить обратную связь"
-)
+LANGUAGE_CHOOSER = "Выбери язык / Choose a language"
 
-UNKNOWN_COMMAND = (
-    "Не знаю такой команды. Вот что я умею:\n\n"
-    "/newcase — создать новый кейс\n"
-    "/join CODE — присоединиться к кейсу\n"
-    "/mycases — посмотреть мои кейсы\n"
-    "/case CODE — посмотреть конкретный кейс\n"
-    "/feedback — оставить обратную связь\n"
-    "/start — показать вводную"
-)
-
-QUESTIONS = [
-    ("what_happened", "1/5. Что произошло? Опиши ситуацию коротко и по делу."),
-    ("conflict_date", "2/5. Когда произошёл этот конфликт или в какой период он развивался? Если конфликт повторяется, так и напиши."),
-    ("what_hurt", "3/5. Что тебя задело или больше всего напрягло в этой ситуации?"),
-    ("desired_outcome", "4/5. Какой результат для тебя был бы приемлемым?"),
-    ("boundary", "5/5. Что для тебя точно неприемлемо или где проходит граница?"),
-]
-
-SHARE_MODE_TEXT = {
-    "summary": "Можно пересказывать второй стороне только нейтральное summary.",
-    "private": "Это останется только для внутреннего анализа бота.",
-    "quote": "Можно при необходимости цитировать почти дословно."
+TEXTS = {
+    "ru": {
+        "intro": "Я нейтральный бот-медиатор. Помогаю двум людям спокойно разложить конфликт, увидеть общие точки и получить первые варианты решения.\n\nКоманды:\n/newcase — создать новый кейс\n/join CODE — присоединиться к кейсу\n/mycases — посмотреть мои кейсы\n/case CODE — посмотреть конкретный кейс\n/feedback — оставить обратную связь",
+        "unknown_command": "Не знаю такой команды. Вот что я умею:\n\n/newcase — создать новый кейс\n/join CODE — присоединиться к кейсу\n/mycases — посмотреть мои кейсы\n/case CODE — посмотреть конкретный кейс\n/feedback — оставить обратную связь\n/start — показать вводную",
+        "newcase_prompt": "Опиши конфликт одним предложением. Это будет название кейса.",
+        "invite_title": "Приглашение в кейс по конфликту:",
+        "invite_link": "Ссылка для второго участника:",
+        "invite_forward": "Можно просто переслать это сообщение собеседнику.",
+        "your_side_intro": "А пока можешь сразу ответить на вопросы по своей стороне конфликта.",
+        "join_usage": "Использование: /join CODE",
+        "case_not_found": "Кейс с таким кодом не найден.",
+        "case_already_joined": "К этому кейсу уже присоединился второй участник.",
+        "joined_intro": "Ты присоединился к кейсу. Ниже тема, по которой будут вопросы.",
+        "start_questions": "Начнём с короткого опроса.",
+        "participant_joined": "Второй участник присоединился. Теперь можно продолжать по теме:",
+        "answer_questions": "Ответь на вопросы.",
+        "feedback_choose": "Выбери область, по которой хочешь оставить обратную связь.",
+        "feedback_prompt": "Коротко оставь обратную связь. Лучше всего указать область: корректность вопросов / flow бота / качество summary / UX / другое.",
+        "case_usage": "Использование: /case CODE",
+        "case_access_denied": "Кейс не найден или у тебя нет к нему доступа.",
+        "status": "Статус",
+        "side_a": "Позиция A",
+        "side_b": "Позиция B",
+        "common_ground": "Общее",
+        "differences": "Расхождения",
+        "options": "Варианты",
+        "no_cases": "У тебя пока нет кейсов.",
+        "my_cases": "Твои кейсы:",
+        "share_prompt": "Как можно использовать этот ответ при пересказе второй стороне?",
+        "share_mode_summary": "Можно пересказывать второй стороне только нейтральное summary.",
+        "share_mode_private": "Это останется только для внутреннего анализа бота.",
+        "share_mode_quote": "Можно при необходимости цитировать почти дословно.",
+        "share_mode_selected": "Режим приватности для следующего ответа:",
+        "feedback_area_selected": "Область обратной связи:",
+        "write_comment": "Теперь напиши короткий комментарий.",
+        "feedback_saved": "Спасибо. Обратную связь записал.",
+        "thinking_next": "Записал. Сейчас быстро обработаю ответ и пришлю следующий вопрос.",
+        "thinking_analysis": "Принял. Теперь немного подумаю над общей картиной и соберу нейтральную сводку для обеих сторон.",
+        "position_saved": "Спасибо. Твоя позиция записана.",
+        "feedback_nudge": "Если захочешь, можешь оставить короткую обратную связь через /feedback",
+        "topic": "Тема конфликта",
+        "period": "Когда/период",
+        "questions": [
+            ("what_happened", "1/5. Что произошло? Опиши ситуацию коротко и по делу."),
+            ("conflict_date", "2/5. Когда произошёл этот конфликт или в какой период он развивался? Если конфликт повторяется, так и напиши."),
+            ("what_hurt", "3/5. Что тебя задело или больше всего напрягло в этой ситуации?"),
+            ("desired_outcome", "4/5. Какой результат для тебя был бы приемлемым?"),
+            ("boundary", "5/5. Что для тебя точно неприемлемо или где проходит граница?"),
+        ],
+        "feedback_areas": {
+            "questions": "Корректность вопросов",
+            "flow": "Flow бота",
+            "summary": "Качество summary",
+            "ux": "UX / интерфейс",
+            "other": "Другое",
+        },
+        "lang_set": "Язык переключён на русский.",
+    },
+    "en": {
+        "intro": "I am a neutral mediation bot. I help two people structure a conflict, identify common ground, and get initial resolution options.\n\nCommands:\n/newcase — create a new case\n/join CODE — join a case\n/mycases — list your cases\n/case CODE — view a specific case\n/feedback — leave feedback",
+        "unknown_command": "I don't know that command. Here is what I can do:\n\n/newcase — create a new case\n/join CODE — join a case\n/mycases — list your cases\n/case CODE — view a specific case\n/feedback — leave feedback\n/start — show intro",
+        "newcase_prompt": "Describe the conflict in one sentence. This will be the case title.",
+        "invite_title": "Invitation to a conflict case:",
+        "invite_link": "Link for the second participant:",
+        "invite_forward": "You can simply forward this message to the other person.",
+        "your_side_intro": "Meanwhile, you can already answer the questions from your side of the conflict.",
+        "join_usage": "Usage: /join CODE",
+        "case_not_found": "No case found with that code.",
+        "case_already_joined": "A second participant has already joined this case.",
+        "joined_intro": "You joined the case. Here is the topic the questions are about.",
+        "start_questions": "Let's start with a short intake.",
+        "participant_joined": "The second participant joined. You can continue on this topic:",
+        "answer_questions": "Please answer the questions.",
+        "feedback_choose": "Choose the area you want to leave feedback about.",
+        "feedback_prompt": "Leave short feedback. Best areas: question quality / bot flow / summary quality / UX / other.",
+        "case_usage": "Usage: /case CODE",
+        "case_access_denied": "Case not found or you do not have access to it.",
+        "status": "Status",
+        "side_a": "Position A",
+        "side_b": "Position B",
+        "common_ground": "Common ground",
+        "differences": "Differences",
+        "options": "Options",
+        "no_cases": "You do not have any cases yet.",
+        "my_cases": "Your cases:",
+        "share_prompt": "How may this answer be used when presenting it to the other side?",
+        "share_mode_summary": "Only a neutral summary may be shared with the other side.",
+        "share_mode_private": "This stays for internal bot analysis only.",
+        "share_mode_quote": "This may be quoted more directly if needed.",
+        "share_mode_selected": "Privacy mode for the next answer:",
+        "feedback_area_selected": "Feedback area:",
+        "write_comment": "Now write a short comment.",
+        "feedback_saved": "Thanks. Your feedback has been saved.",
+        "thinking_next": "Saved. I will quickly process this and send the next question.",
+        "thinking_analysis": "Got it. Now I will think for a moment and prepare a neutral summary for both sides.",
+        "position_saved": "Thanks. Your position has been saved.",
+        "feedback_nudge": "If you want, you can leave short feedback via /feedback",
+        "topic": "Conflict topic",
+        "period": "When/period",
+        "questions": [
+            ("what_happened", "1/5. What happened? Describe the situation briefly and clearly."),
+            ("conflict_date", "2/5. When did this conflict happen, or over what period did it develop? If it repeats, say so."),
+            ("what_hurt", "3/5. What hurt you or felt most difficult in this situation?"),
+            ("desired_outcome", "4/5. What outcome would be acceptable to you?"),
+            ("boundary", "5/5. What is definitely unacceptable to you, or where is your boundary?"),
+        ],
+        "feedback_areas": {
+            "questions": "Question quality",
+            "flow": "Bot flow",
+            "summary": "Summary quality",
+            "ux": "UX / interface",
+            "other": "Other",
+        },
+        "lang_set": "Language switched to English.",
+    },
 }
-
-THINKING_NEXT_QUESTION = "Записал. Сейчас быстро обработаю ответ и пришлю следующий вопрос."
-THINKING_ANALYSIS = "Принял. Теперь немного подумаю над общей картиной и соберу нейтральную сводку для обеих сторон."
-FEEDBACK_PROMPT = "Коротко оставь обратную связь. Лучше всего указать область: корректность вопросов / flow бота / качество summary / UX / другое."

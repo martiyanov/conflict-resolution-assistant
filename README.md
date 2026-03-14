@@ -4,6 +4,8 @@ Telegram MVP for structured two-party conflict mediation.
 
 ## What it does
 
+- supports Russian and English
+- asks the user to choose a language
 - creates a conflict case
 - generates a shareable invite link for the second participant
 - shows the conflict topic and period in the flow
@@ -25,7 +27,7 @@ Telegram MVP for structured two-party conflict mediation.
 - `/newcase` — create a new case
 - `/join CODE` — join a case
 - `/mycases` — list your cases
-- `/case CODE` — show one specific case
+- `/case CODE` — view a specific case
 - `/feedback` — leave short feedback
 
 Unknown commands return a short help message.

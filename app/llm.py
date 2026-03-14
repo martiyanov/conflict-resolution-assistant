@@ -5,7 +5,8 @@ from app.config import settings
 client = AsyncOpenAI(api_key=settings.openai_api_key)
 
 
-async def analyze_positions(answer_blob_a: str, answer_blob_b: str) -> dict:
+async def analyze_positions(answer_blob_a: str, answer_blob_b: str, language: str = "ru") -> dict:
+    output_language = "Russian" if language == "ru" else "English"
     prompt = f"""
 You are a neutral conflict-mediation assistant.
 Analyze two participants' answers.
@@ -17,7 +18,7 @@ Rules:
 - Do not choose sides.
 - Respect privacy markers like [PRIVATE] and do not expose their contents in summaries for the other side.
 - options must be an array of 3 short concrete resolution options.
-- Write in Russian.
+- Write in {output_language}.
 
 Participant A:
 {answer_blob_a}

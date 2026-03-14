@@ -39,6 +39,12 @@ CREATE TABLE IF NOT EXISTS feedback (
   feedback_text TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS user_settings (
+  user_id INTEGER PRIMARY KEY,
+  language TEXT NOT NULL DEFAULT 'ru',
+  updated_at TEXT NOT NULL
+);
 """
 
 
