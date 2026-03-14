@@ -117,6 +117,9 @@ async def discussion_actions_keyboard(user_id: int, join_code: str) -> InlineKey
         [
             InlineKeyboardButton(text=texts["open_discussion"], callback_data=f"discussion:open:{join_code}"),
             InlineKeyboardButton(text=texts["discussion_invite"], callback_data=f"discussion:invite:{join_code}"),
+        ],
+        [
+            InlineKeyboardButton(text=texts["discussion_delete"], callback_data=f"discussion:delete:{join_code}"),
         ]
     ])
 
@@ -178,27 +181,49 @@ async def main_menu_action(callback: CallbackQuery, state: FSMContext):
 @dp.callback_query(F.data.startswith("discussion:"))
 async def discussion_action(callback: CallbackQuery):
     _, action, join_code = callback.data.split(":", 2)
+    user_id = callback.from_user.id
     await callback.answer("OK")
     if action == "open":
         fake_command = CommandObject(prefix="/", command="case", args=join_code)
-        await case_view(callback.message, fake_command)
+        await case_view(callback.message, fake_command, user_id=user_id)
         return
     if action == "invite":
         async with await get_db() as db:
-            cursor = await db.execute("SELECT title, conflict_period FROM cases WHERE join_code = ?", (join_code,))
+            cursor = await db.execute(
+                "SELECT title, conflict_period FROM cases WHERE join_code = ? AND (participant_a_user_id = ? OR participant_b_user_id = ?)",
+                (join_code, user_id, user_id),
+            )
             row = await cursor.fetchone()
         if not row:
-            await callback.message.answer(await t(callback.from_user.id, "case_not_found"))
+            await callback.message.answer(await t(user_id, "case_access_denied"))
             return
         title, conflict_period = row
         invite_link = await create_start_link(bot, f"join_{join_code}", encode=True)
         invite_text = (
-            f"{await t(callback.from_user.id, 'invite_title')}\n\n"
-            f"{await format_case_header(callback.from_user.id, title, conflict_period)}\n\n"
-            f"{await t(callback.from_user.id, 'invite_link')}\n{invite_link}\n\n"
-            f"{await t(callback.from_user.id, 'invite_forward')}"
+            f"{await t(user_id, 'invite_title')}\n\n"
+            f"{await format_case_header(user_id, title, conflict_period)}\n\n"
+            f"{await t(user_id, 'invite_link')}\n{invite_link}\n\n"
+            f"{await t(user_id, 'invite_forward')}"
         )
         await callback.message.answer(invite_text)
+        return
+    if action == "delete":
+        async with await get_db() as db:
+            cursor = await db.execute(
+                "SELECT id FROM cases WHERE join_code = ? AND creator_user_id = ?",
+                (join_code, user_id),
+            )
+            row = await cursor.fetchone()
+            if not row:
+                await callback.message.answer(await t(user_id, "case_access_denied"))
+                return
+            case_id = row[0]
+            await db.execute("DELETE FROM case_actions WHERE case_id = ?", (case_id,))
+            await db.execute("DELETE FROM intake_answers WHERE case_id = ?", (case_id,))
+            await db.execute("DELETE FROM feedback WHERE case_id = ?", (case_id,))
+            await db.execute("DELETE FROM cases WHERE id = ?", (case_id,))
+            await db.commit()
+        await callback.message.answer(await t(user_id, "discussion_deleted"))
 
 
 @dp.callback_query(F.data.startswith("decision:"))
@@ -335,23 +360,24 @@ async def feedback(message: Message, state: FSMContext, user_id: int | None = No
 
 
 @dp.message(Command("case"))
-async def case_view(message: Message, command: CommandObject):
+async def case_view(message: Message, command: CommandObject, user_id: int | None = None):
+    user_id = user_id or message.from_user.id
     if not command.args:
-        await message.answer(await t(message.from_user.id, "case_usage"))
+        await message.answer(await t(user_id, "case_usage"))
         return
     join_code = command.args.strip()
     async with await get_db() as db:
         cursor = await db.execute(
             "SELECT title, conflict_period, status, summary_a, summary_b, common_ground, differences, options_text FROM cases WHERE join_code = ? AND (participant_a_user_id = ? OR participant_b_user_id = ?)",
-            (join_code, message.from_user.id, message.from_user.id),
+            (join_code, user_id, user_id),
         )
         row = await cursor.fetchone()
     if not row:
-        await message.answer(await t(message.from_user.id, "case_access_denied"))
+        await message.answer(await t(user_id, "case_access_denied"))
         return
     title, conflict_period, status, summary_a, summary_b, common_ground, differences, options_text = row
-    texts = TEXTS[await get_lang(message.from_user.id)]
-    body = [await format_case_header(message.from_user.id, title, conflict_period), f"{texts['status']}: {await human_status(message.from_user.id, status)}"]
+    texts = TEXTS[await get_lang(user_id)]
+    body = [await format_case_header(user_id, title, conflict_period), f"{texts['status']}: {await human_status(user_id, status)}"]
     if summary_a:
         body.append(f"\n{texts['side_a']}:\n{summary_a}")
     if summary_b:
@@ -362,7 +388,7 @@ async def case_view(message: Message, command: CommandObject):
         body.append(f"\n{texts['differences']}:\n{differences}")
     if options_text:
         body.append(f"\n{texts['options']}:\n{options_text}")
-    await message.answer("\n".join(body))
+    await message.answer("\n".join(body), reply_markup=await discussion_actions_keyboard(user_id, join_code))
 
 
 @dp.message(Command("mycases"))
