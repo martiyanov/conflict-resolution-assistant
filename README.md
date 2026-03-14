@@ -76,7 +76,7 @@ A lightweight health check script is included:
 ./ops/check_bot_health.sh
 ```
 
-It only reports a **new** error when one appears in container state/logs, and stores its last seen signature in `var/health-state.json`.
+It only reports a **new** error when one appears in container state/logs, stores its last seen signature in `var/health-state.json`, and writes a short human-readable report to `var/health-report.txt`.
 
 To run it periodically with user systemd:
 
