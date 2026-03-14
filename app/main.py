@@ -9,7 +9,7 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import BotCommand, BotCommandScopeAllPrivateChats, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.utils.deep_linking import create_start_link, decode_payload
 
 from app.config import settings
@@ -640,8 +640,27 @@ async def outside_dialog_text(message: Message):
     await message.answer(await t(message.from_user.id, "outside_text"), reply_markup=main_menu_keyboard(TEXTS[await get_lang(message.from_user.id)]))
 
 
+async def setup_bot_commands():
+    ru_commands = [
+        BotCommand(command="start", description="Открыть главное меню"),
+        BotCommand(command="newcase", description="Создать новое обсуждение"),
+        BotCommand(command="mycases", description="Мои обсуждения"),
+        BotCommand(command="feedback", description="Оставить отзыв"),
+    ]
+    en_commands = [
+        BotCommand(command="start", description="Open main menu"),
+        BotCommand(command="newcase", description="Create a new discussion"),
+        BotCommand(command="mycases", description="My discussions"),
+        BotCommand(command="feedback", description="Leave feedback"),
+    ]
+    await bot.set_my_commands(ru_commands, scope=BotCommandScopeAllPrivateChats(), language_code="ru")
+    await bot.set_my_commands(en_commands, scope=BotCommandScopeAllPrivateChats(), language_code="en")
+    await bot.set_my_commands(ru_commands, scope=BotCommandScopeAllPrivateChats())
+
+
 async def on_startup():
     await init_db(settings.database_path)
+    await setup_bot_commands()
 
 
 async def main():
