@@ -176,11 +176,11 @@ async def main_menu_action(callback: CallbackQuery, state: FSMContext):
     action = callback.data.split(":", 1)[1]
     await callback.answer("OK")
     if action == "newcase":
-        await new_case(callback.message, state)
+        await new_case(callback.message, state, user_id=callback.from_user.id)
     elif action == "mycases":
-        await my_cases(callback.message)
+        await my_cases(callback.message, user_id=callback.from_user.id)
     elif action == "feedback":
-        await feedback(callback.message, state)
+        await feedback(callback.message, state, user_id=callback.from_user.id)
     elif action == "language":
         await callback.message.answer(LANGUAGE_CHOOSER, reply_markup=language_keyboard())
 
@@ -258,10 +258,11 @@ async def start(message: Message, state: FSMContext, command: CommandObject):
 
 
 @dp.message(Command("newcase"))
-async def new_case(message: Message, state: FSMContext):
+async def new_case(message: Message, state: FSMContext, user_id: int | None = None):
+    user_id = user_id or message.from_user.id
     await state.clear()
     await state.set_state(IntakeStates.waiting_case_title)
-    await message.answer(await t(message.from_user.id, "newcase_prompt"))
+    await message.answer(await t(user_id, "newcase_prompt"))
 
 
 @dp.message(IntakeStates.waiting_case_title)
@@ -338,10 +339,11 @@ async def join_case(message: Message, command: CommandObject, state: FSMContext)
 
 
 @dp.message(Command("feedback"))
-async def feedback(message: Message, state: FSMContext):
+async def feedback(message: Message, state: FSMContext, user_id: int | None = None):
+    user_id = user_id or message.from_user.id
     await state.set_state(IntakeStates.waiting_feedback)
-    await message.answer(await t(message.from_user.id, "feedback_choose"), reply_markup=await feedback_keyboard(message.from_user.id))
-    await message.answer(await t(message.from_user.id, "feedback_prompt"))
+    await message.answer(await t(user_id, "feedback_choose"), reply_markup=await feedback_keyboard(user_id))
+    await message.answer(await t(user_id, "feedback_prompt"))
 
 
 @dp.message(Command("case"))
@@ -376,21 +378,22 @@ async def case_view(message: Message, command: CommandObject):
 
 
 @dp.message(Command("mycases"))
-async def my_cases(message: Message):
+async def my_cases(message: Message, user_id: int | None = None):
+    user_id = user_id or message.from_user.id
     async with await get_db() as db:
-        cursor = await db.execute("SELECT title, conflict_period, join_code, status FROM cases WHERE participant_a_user_id = ? OR participant_b_user_id = ? ORDER BY created_at DESC LIMIT 10", (message.from_user.id, message.from_user.id))
+        cursor = await db.execute("SELECT title, conflict_period, join_code, status FROM cases WHERE participant_a_user_id = ? OR participant_b_user_id = ? ORDER BY created_at DESC LIMIT 10", (user_id, user_id))
         rows = await cursor.fetchall()
     if not rows:
-        await message.answer(await t(message.from_user.id, "no_cases"))
+        await message.answer(await t(user_id, "no_cases"))
         return
-    await message.answer(await t(message.from_user.id, "my_cases"))
+    await message.answer(await t(user_id, "my_cases"))
     for title, conflict_period, code, status in rows:
         text = (
-            f"{await format_case_header(message.from_user.id, title, conflict_period)}\n"
-            f"{await t(message.from_user.id, 'status')}: {await human_status(message.from_user.id, status)}\n"
-            f"{await t(message.from_user.id, 'code_label')}: `{code}`"
+            f"{await format_case_header(user_id, title, conflict_period)}\n"
+            f"{await t(user_id, 'status')}: {await human_status(user_id, status)}\n"
+            f"{await t(user_id, 'code_label')}: `{code}`"
         )
-        await message.answer(text, parse_mode="Markdown", reply_markup=await discussion_actions_keyboard(message.from_user.id, code))
+        await message.answer(text, parse_mode="Markdown", reply_markup=await discussion_actions_keyboard(user_id, code))
 
 
 @dp.callback_query(F.data.startswith("share:"))
