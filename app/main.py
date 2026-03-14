@@ -116,6 +116,21 @@ async def format_case_header(user_id: int, title: str, conflict_period: str | No
     return header
 
 
+async def human_status(user_id: int, status: str) -> str:
+    texts = TEXTS[await get_lang(user_id)]
+    return texts.get(f"status_{status}", status)
+
+
+async def discussion_actions_keyboard(user_id: int, join_code: str) -> InlineKeyboardMarkup:
+    texts = TEXTS[await get_lang(user_id)]
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text=texts["open_discussion"], callback_data=f"discussion:open:{join_code}"),
+            InlineKeyboardButton(text=texts["discussion_invite"], callback_data=f"discussion:invite:{join_code}"),
+        ]
+    ])
+
+
 @dp.callback_query(F.data.startswith("lang:"))
 async def language_selected(callback: CallbackQuery, state: FSMContext):
     lang = callback.data.split(":", 1)[1]
@@ -137,6 +152,32 @@ async def main_menu_action(callback: CallbackQuery, state: FSMContext):
         await feedback(callback.message, state)
     elif action == "language":
         await callback.message.answer(LANGUAGE_CHOOSER, reply_markup=language_keyboard())
+
+
+@dp.callback_query(F.data.startswith("discussion:"))
+async def discussion_action(callback: CallbackQuery):
+    _, action, join_code = callback.data.split(":", 2)
+    await callback.answer("OK")
+    if action == "open":
+        fake_command = CommandObject(prefix="/", command="case", args=join_code)
+        await case_view(callback.message, fake_command)
+        return
+    if action == "invite":
+        async with await get_db() as db:
+            cursor = await db.execute("SELECT title, conflict_period FROM cases WHERE join_code = ?", (join_code,))
+            row = await cursor.fetchone()
+        if not row:
+            await callback.message.answer(await t(callback.from_user.id, "case_not_found"))
+            return
+        title, conflict_period = row
+        invite_link = await create_start_link(bot, f"join_{join_code}", encode=True)
+        invite_text = (
+            f"{await t(callback.from_user.id, 'invite_title')}\n\n"
+            f"{await format_case_header(callback.from_user.id, title, conflict_period)}\n\n"
+            f"{await t(callback.from_user.id, 'invite_link')}\n{invite_link}\n\n"
+            f"{await t(callback.from_user.id, 'invite_forward')}"
+        )
+        await callback.message.answer(invite_text)
 
 
 @dp.message(Command("start"))
@@ -260,7 +301,7 @@ async def case_view(message: Message, command: CommandObject):
         return
     title, conflict_period, status, summary_a, summary_b, common_ground, differences, options_text = row
     texts = TEXTS[await get_lang(message.from_user.id)]
-    body = [await format_case_header(message.from_user.id, title, conflict_period), f"{texts['status']}: {status}"]
+    body = [await format_case_header(message.from_user.id, title, conflict_period), f"{texts['status']}: {await human_status(message.from_user.id, status)}"]
     if summary_a:
         body.append(f"\n{texts['side_a']}:\n{summary_a}")
     if summary_b:
@@ -282,11 +323,14 @@ async def my_cases(message: Message):
     if not rows:
         await message.answer(await t(message.from_user.id, "no_cases"))
         return
-    lines = []
+    await message.answer(await t(message.from_user.id, "my_cases"))
     for title, conflict_period, code, status in rows:
-        period = f" ({conflict_period})" if conflict_period else ""
-        lines.append(f"• {title}{period} — {status} — code `{code}`")
-    await message.answer((await t(message.from_user.id, "my_cases")) + "\n" + "\n".join(lines), parse_mode="Markdown")
+        text = (
+            f"{await format_case_header(message.from_user.id, title, conflict_period)}\n"
+            f"{await t(message.from_user.id, 'status')}: {await human_status(message.from_user.id, status)}\n"
+            f"Код: `{code}`"
+        )
+        await message.answer(text, parse_mode="Markdown", reply_markup=await discussion_actions_keyboard(message.from_user.id, code))
 
 
 @dp.callback_query(F.data.startswith("share:"))
