@@ -9,7 +9,7 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
+from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 from aiogram.utils.deep_linking import create_start_link, decode_payload
 
 from app.config import settings
@@ -62,15 +62,6 @@ def feedback_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="UX / интерфейс", callback_data="feedback_area:ux")],
         [InlineKeyboardButton(text="Другое", callback_data="feedback_area:other")],
     ])
-
-
-async def fetch_case(case_id: str):
-    async with await get_db() as db:
-        cursor = await db.execute(
-            "SELECT title, conflict_period, status, join_code, summary_a, summary_b, common_ground, differences, options_text FROM cases WHERE id = ?",
-            (case_id,),
-        )
-        return await cursor.fetchone()
 
 
 @dp.message(Command("start"))
@@ -227,7 +218,7 @@ async def my_cases(message: Message):
 
 
 @dp.callback_query(F.data.startswith("share:"))
-async def share_mode_selected(callback, state: FSMContext):
+async def share_mode_selected(callback: CallbackQuery, state: FSMContext):
     mode = callback.data.split(":", 1)[1]
     await state.update_data(share_mode=mode)
     await callback.answer("Принято")
@@ -235,7 +226,7 @@ async def share_mode_selected(callback, state: FSMContext):
 
 
 @dp.callback_query(F.data.startswith("feedback_area:"))
-async def feedback_area_selected(callback, state: FSMContext):
+async def feedback_area_selected(callback: CallbackQuery, state: FSMContext):
     area = callback.data.split(":", 1)[1]
     await state.update_data(feedback_area=area)
     await callback.answer("Ок")

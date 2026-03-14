@@ -5,13 +5,30 @@ Telegram MVP for structured two-party conflict mediation.
 ## What it does
 
 - creates a conflict case
-- invites a second participant with a join code
+- generates a shareable invite link for the second participant
+- shows the conflict topic and period in the flow
 - collects intake answers from each side
+- lets each answer be marked as:
+  - summary only
+  - fully private
+  - quotable
 - asks OpenAI to produce:
   - neutral summary of each side
   - common ground
   - core differences
   - concrete next-step options
+- stores lightweight user feedback about the bot
+
+## Commands
+
+- `/start` — intro
+- `/newcase` — create a new case
+- `/join CODE` — join a case
+- `/mycases` — list your cases
+- `/case CODE` — show one specific case
+- `/feedback` — leave short feedback
+
+Unknown commands return a short help message.
 
 ## Stack
 
@@ -50,6 +67,6 @@ Required:
 
 - no admin panel
 - no web UI
-- no advanced privacy policy separation between internal/external summaries yet
+- no advanced separation between internal/private analysis and external summaries yet
 - no voice-specific flows inside this bot yet
 - long polling only
