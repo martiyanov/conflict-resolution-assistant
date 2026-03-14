@@ -1,0 +1,17 @@
+[Unit]
+Description=Conflict Resolution Assistant (Docker Compose)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.openclaw/workspace/conflict-resolution-assistant
+RemainAfterExit=yes
+ExecStart=/usr/bin/docker-compose up -d
+ExecStop=/usr/bin/docker-compose down
+ExecReload=/usr/bin/docker-compose up -d
+TimeoutStartSec=120
+TimeoutStopSec=60
+
+[Install]
+WantedBy=default.target

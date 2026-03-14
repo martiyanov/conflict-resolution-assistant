@@ -44,9 +44,21 @@ docker-compose up --build -d
 ./scripts/deploy.sh
 ./scripts/status.sh
 ./scripts/logs.sh
+./scripts/restart.sh
 ```
 
 `deploy.sh` pulls latest code, rebuilds the image, restarts the container, and prints status.
+
+## systemd user service
+
+To make the container start on login/reboot via your user systemd:
+
+```bash
+./systemd/install-user-service.sh
+systemctl --user status conflict-resolution-assistant.service
+```
+
+The unit file lives in `systemd/conflict-resolution-assistant.service`.
 
 ## Environment
 
