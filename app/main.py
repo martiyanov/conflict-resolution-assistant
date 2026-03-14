@@ -69,19 +69,11 @@ async def get_questions(user_id: int):
     return TEXTS[lang]["questions"]
 
 
-def language_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="Русский", callback_data="lang:ru")],
-        [InlineKeyboardButton(text="English", callback_data="lang:en")],
-    ])
-
-
 def main_menu_keyboard(texts: dict) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=texts["menu_create"], callback_data="menu:newcase")],
         [InlineKeyboardButton(text=texts["menu_list"], callback_data="menu:mycases")],
         [InlineKeyboardButton(text=texts["menu_feedback"], callback_data="menu:feedback")],
-        [InlineKeyboardButton(text=texts["menu_language"], callback_data="menu:language")],
     ])
 
 
@@ -171,15 +163,6 @@ async def decision_keyboard(user_id: int, case_id: str) -> InlineKeyboardMarkup:
     ])
 
 
-@dp.callback_query(F.data.startswith("lang:"))
-async def language_selected(callback: CallbackQuery, state: FSMContext):
-    lang = callback.data.split(":", 1)[1]
-    await set_lang(callback.from_user.id, lang)
-    await callback.answer("OK")
-    await callback.message.answer(TEXTS[lang]["lang_set"])
-    await callback.message.answer(TEXTS[lang]["intro"], reply_markup=main_menu_keyboard(TEXTS[lang]))
-
-
 @dp.callback_query(F.data.startswith("menu:"))
 async def main_menu_action(callback: CallbackQuery, state: FSMContext):
     action = callback.data.split(":", 1)[1]
@@ -190,8 +173,6 @@ async def main_menu_action(callback: CallbackQuery, state: FSMContext):
         await my_cases(callback.message, user_id=callback.from_user.id)
     elif action == "feedback":
         await feedback(callback.message, state, user_id=callback.from_user.id)
-    elif action == "language":
-        await callback.message.answer(LANGUAGE_CHOOSER, reply_markup=language_keyboard())
 
 
 @dp.callback_query(F.data.startswith("discussion:"))
@@ -341,9 +322,6 @@ async def start(message: Message, state: FSMContext, command: CommandObject):
             fake_command = CommandObject(prefix="/", command="join", args=join_code)
             await join_case(message, fake_command, state)
             return
-    lang = await get_lang(message.from_user.id)
-    if lang not in TEXTS or lang == "ru":
-        await message.answer(LANGUAGE_CHOOSER, reply_markup=language_keyboard())
     texts = TEXTS[await get_lang(message.from_user.id)]
     await message.answer(await t(message.from_user.id, "intro"), reply_markup=main_menu_keyboard(texts))
 
@@ -647,14 +625,6 @@ async def setup_bot_commands():
         BotCommand(command="mycases", description="Мои обсуждения"),
         BotCommand(command="feedback", description="Оставить отзыв"),
     ]
-    en_commands = [
-        BotCommand(command="start", description="Open main menu"),
-        BotCommand(command="newcase", description="Create a new discussion"),
-        BotCommand(command="mycases", description="My discussions"),
-        BotCommand(command="feedback", description="Leave feedback"),
-    ]
-    await bot.set_my_commands(ru_commands, scope=BotCommandScopeAllPrivateChats(), language_code="ru")
-    await bot.set_my_commands(en_commands, scope=BotCommandScopeAllPrivateChats(), language_code="en")
     await bot.set_my_commands(ru_commands, scope=BotCommandScopeAllPrivateChats())
 
 
