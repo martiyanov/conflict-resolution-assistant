@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Conflict Resolution Assistant health check every 10 minutes
+
+[Timer]
+OnBootSec=3m
+OnUnitActiveSec=10m
+Unit=conflict-resolution-assistant-health.service
+Persistent=true
+
+[Install]
+WantedBy=timers.target

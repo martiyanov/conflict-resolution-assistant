@@ -1,0 +1,9 @@
+[Unit]
+Description=Conflict Resolution Assistant health check
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/.openclaw/workspace/conflict-resolution-assistant
+ExecStart=%h/.openclaw/workspace/conflict-resolution-assistant/ops/check_bot_health.sh

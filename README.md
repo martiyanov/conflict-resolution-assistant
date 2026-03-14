@@ -68,6 +68,23 @@ Required:
 - `BOT_TOKEN`
 - `OPENAI_API_KEY`
 
+## Health check
+
+A lightweight health check script is included:
+
+```bash
+./ops/check_bot_health.sh
+```
+
+It only reports a **new** error when one appears in container state/logs, and stores its last seen signature in `var/health-state.json`.
+
+To run it periodically with user systemd:
+
+```bash
+./systemd/install-healthcheck.sh
+systemctl --user status conflict-resolution-assistant-health.timer
+```
+
 ## Current MVP limits
 
 - no admin panel
