@@ -397,11 +397,24 @@ async def feedback_area_selected(callback: CallbackQuery, state: FSMContext):
 async def handle_feedback(message: Message, state: FSMContext):
     data = await state.get_data()
     area = data.get("feedback_area", "other")
+    feedback_text = message.text.strip()
     async with await get_db() as db:
-        await db.execute("INSERT INTO feedback (case_id, user_id, area, feedback_text, created_at) VALUES (?, ?, ?, ?, ?)", (None, message.from_user.id, area, message.text.strip(), await now_iso()))
+        await db.execute("INSERT INTO feedback (case_id, user_id, area, feedback_text, created_at) VALUES (?, ?, ?, ?, ?)", (None, message.from_user.id, area, feedback_text, await now_iso()))
         await db.commit()
     await state.clear()
     await message.answer(await t(message.from_user.id, "feedback_saved"))
+    if settings.owner_telegram_id:
+        try:
+            area_label = TEXTS[await get_lang(message.from_user.id)]["feedback_areas"].get(area, area)
+            owner_text = (
+                "Новый отзыв о боте\n\n"
+                f"От пользователя: {message.from_user.id}\n"
+                f"Область: {area_label}\n"
+                f"Текст: {feedback_text}"
+            )
+            await bot.send_message(settings.owner_telegram_id, owner_text)
+        except Exception:
+            logger.exception("Failed to forward feedback to owner")
 
 
 @dp.message(F.text, IntakeStates.waiting_answers)

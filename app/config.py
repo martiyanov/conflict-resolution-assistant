@@ -13,6 +13,7 @@ class Settings:
     openai_model: str = "gpt-4o-mini"
     database_path: str = "/app/data/app.db"
     log_level: str = "INFO"
+    owner_telegram_id: int | None = None
 
 
 settings = Settings(
@@ -21,4 +22,5 @@ settings = Settings(
     openai_model=os.getenv("OPENAI_MODEL", "gpt-4o-mini"),
     database_path=os.getenv("DATABASE_PATH", "/app/data/app.db"),
     log_level=os.getenv("LOG_LEVEL", "INFO"),
+    owner_telegram_id=int(os.getenv("OWNER_TELEGRAM_ID")) if os.getenv("OWNER_TELEGRAM_ID") else None,
 )
