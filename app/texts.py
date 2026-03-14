@@ -2,7 +2,7 @@ LANGUAGE_CHOOSER = "Выбери язык / Choose a language"
 
 TEXTS = {
     "ru": {
-        "intro": "Я нейтральный бот-медиатор. Помогаю двум людям спокойно разложить конфликт, увидеть общие точки и получить первые варианты решения.",
+        "intro": "Я помогаю двум людям спокойно разобрать конфликт: понять, что произошло, где расхождения и как двигаться дальше.",
         "unknown_command": "Не знаю такой команды. Вот что я умею:\n\n/newcase — создать новое обсуждение\n/join CODE — присоединиться по коду\n/mycases — посмотреть мои обсуждения\n/case CODE — открыть обсуждение\n/feedback — оставить отзыв\n/start — открыть главное меню",
         "newcase_prompt": "Опиши конфликт одним предложением. Это будет название обсуждения.",
         "invite_title": "Приглашение в обсуждение конфликта:",
@@ -104,7 +104,7 @@ TEXTS = {
         "next_step": "Что происходит сейчас",
     },
     "en": {
-        "intro": "I am a neutral mediation bot. I help two people structure a conflict, identify common ground, and get initial resolution options.\n\nCommands:\n/newcase — create a new case\n/join CODE — join a case\n/mycases — list your cases\n/case CODE — view a specific case\n/feedback — leave feedback",
+        "intro": "I help two people calmly work through a conflict: understand what happened, where the differences are, and how to move forward.",
         "unknown_command": "I don't know that command. Here is what I can do:\n\n/newcase — create a new case\n/join CODE — join a case\n/mycases — list your cases\n/case CODE — view a specific case\n/feedback — leave feedback\n/start — show intro",
         "newcase_prompt": "Describe the conflict in one sentence. This will be the case title.",
         "invite_title": "Invitation to a conflict case:",
