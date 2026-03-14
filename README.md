@@ -35,8 +35,18 @@ python -m app.main
 
 ```bash
 cp .env.example .env
-docker compose up --build -d
+docker-compose up --build -d
 ```
+
+## Deploy helpers
+
+```bash
+./scripts/deploy.sh
+./scripts/status.sh
+./scripts/logs.sh
+```
+
+`deploy.sh` pulls latest code, rebuilds the image, restarts the container, and prints status.
 
 ## Environment
 
