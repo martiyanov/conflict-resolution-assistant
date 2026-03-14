@@ -15,7 +15,7 @@ from aiogram.utils.deep_linking import create_start_link, decode_payload
 from app.config import settings
 from app.db import init_db
 from app.llm import analyze_positions
-from app.texts import LANGUAGE_CHOOSER, TEXTS
+from app.texts import TEXTS
 
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
@@ -39,47 +39,20 @@ async def get_db():
     return aiosqlite.connect(settings.database_path)
 
 
-async def get_lang(user_id: int) -> str:
-    async with await get_db() as db:
-        cursor = await db.execute("SELECT language FROM user_settings WHERE user_id = ?", (user_id,))
-        row = await cursor.fetchone()
-    return row[0] if row and row[0] in TEXTS else "ru"
+async def t(key: str):
+    return TEXTS[key]
 
 
-async def set_lang(user_id: int, lang: str):
-    async with await get_db() as db:
-        await db.execute(
-            """
-            INSERT INTO user_settings (user_id, language, updated_at)
-            VALUES (?, ?, ?)
-            ON CONFLICT(user_id) DO UPDATE SET language=excluded.language, updated_at=excluded.updated_at
-            """,
-            (user_id, lang, await now_iso()),
-        )
-        await db.commit()
-
-
-async def t(user_id: int, key: str):
-    lang = await get_lang(user_id)
-    return TEXTS[lang][key]
-
-
-async def get_questions(user_id: int):
-    lang = await get_lang(user_id)
-    return TEXTS[lang]["questions"]
-
-
-def main_menu_keyboard(texts: dict) -> InlineKeyboardMarkup:
+def main_menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=texts["menu_create"], callback_data="menu:newcase")],
-        [InlineKeyboardButton(text=texts["menu_list"], callback_data="menu:mycases")],
-        [InlineKeyboardButton(text=texts["menu_feedback"], callback_data="menu:feedback")],
+        [InlineKeyboardButton(text=TEXTS["menu_create"], callback_data="menu:newcase")],
+        [InlineKeyboardButton(text=TEXTS["menu_list"], callback_data="menu:mycases")],
+        [InlineKeyboardButton(text=TEXTS["menu_feedback"], callback_data="menu:feedback")],
     ])
 
 
-async def feedback_keyboard(user_id: int) -> InlineKeyboardMarkup:
-    lang = await get_lang(user_id)
-    areas = TEXTS[lang]["feedback_areas"]
+def feedback_keyboard() -> InlineKeyboardMarkup:
+    areas = TEXTS["feedback_areas"]
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=areas["questions"], callback_data="feedback_area:questions")],
         [InlineKeyboardButton(text=areas["flow"], callback_data="feedback_area:flow")],
@@ -89,46 +62,46 @@ async def feedback_keyboard(user_id: int) -> InlineKeyboardMarkup:
     ])
 
 
-async def format_case_header(user_id: int, title: str, conflict_period: str | None = None) -> str:
-    lang = await get_lang(user_id)
-    texts = TEXTS[lang]
-    header = f"{texts['topic']}: {title}"
+def format_case_header(title: str, conflict_period: str | None = None) -> str:
+    header = f"{TEXTS['topic']}: {title}"
     if conflict_period:
-        header += f"\n{texts['period']}: {conflict_period}"
+        header += f"\n{TEXTS['period']}: {conflict_period}"
     return header
 
 
-async def human_status(user_id: int, status: str) -> str:
-    texts = TEXTS[await get_lang(user_id)]
-    return texts.get(f"status_{status}", status)
+def human_status(status: str) -> str:
+    return TEXTS.get(f"status_{status}", status)
 
 
-async def next_step_hint(user_id: int, status: str) -> str:
-    texts = TEXTS[await get_lang(user_id)]
-    return texts.get(f"next_{status}", status)
+def next_step_hint(status: str) -> str:
+    return TEXTS.get(f"next_{status}", status)
 
 
-async def discussion_actions_keyboard(user_id: int, join_code: str, status: str | None = None) -> InlineKeyboardMarkup:
-    texts = TEXTS[await get_lang(user_id)]
-    rows = [
-        [
-            InlineKeyboardButton(text=texts["open_discussion"], callback_data=f"discussion:open:{join_code}"),
-            InlineKeyboardButton(text=texts["discussion_invite"], callback_data=f"discussion:invite:{join_code}"),
-        ]
-    ]
+def discussion_actions_keyboard(join_code: str, status: str | None = None) -> InlineKeyboardMarkup:
+    rows = [[
+        InlineKeyboardButton(text=TEXTS["open_discussion"], callback_data=f"discussion:open:{join_code}"),
+        InlineKeyboardButton(text=TEXTS["discussion_invite"], callback_data=f"discussion:invite:{join_code}"),
+    ]]
     if status in {"waiting_for_b", "intake", "intake_a", "intake_b", "continues", "analysis_ready"}:
-        rows.append([InlineKeyboardButton(text=texts["discussion_continue"], callback_data=f"discussion:continue:{join_code}")])
+        rows.append([InlineKeyboardButton(text=TEXTS["discussion_continue"], callback_data=f"discussion:continue:{join_code}")])
     if status in {"analysis_ready", "resolved", "paused", "continues"}:
-        rows.append([InlineKeyboardButton(text=texts["discussion_feedback"], callback_data=f"discussion:feedback:{join_code}")])
-    rows.append([InlineKeyboardButton(text=texts["discussion_delete"], callback_data=f"discussion:delete:{join_code}")])
+        rows.append([InlineKeyboardButton(text=TEXTS["discussion_feedback"], callback_data=f"discussion:feedback:{join_code}")])
+    rows.append([InlineKeyboardButton(text=TEXTS["discussion_delete"], callback_data=f"discussion:delete:{join_code}")])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-async def delete_confirm_keyboard(user_id: int, join_code: str) -> InlineKeyboardMarkup:
-    texts = TEXTS[await get_lang(user_id)]
+def delete_confirm_keyboard(join_code: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=texts["delete_yes"], callback_data=f"discussion:delete_confirm:{join_code}")],
-        [InlineKeyboardButton(text=texts["delete_no"], callback_data=f"discussion:delete_cancel:{join_code}")],
+        [InlineKeyboardButton(text=TEXTS["delete_yes"], callback_data=f"discussion:delete_confirm:{join_code}")],
+        [InlineKeyboardButton(text=TEXTS["delete_no"], callback_data=f"discussion:delete_cancel:{join_code}")],
+    ])
+
+
+def decision_keyboard(case_id: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=TEXTS["decision_resolve"], callback_data=f"decision:resolved:{case_id}")],
+        [InlineKeyboardButton(text=TEXTS["decision_continue"], callback_data=f"decision:continues:{case_id}")],
+        [InlineKeyboardButton(text=TEXTS["decision_pause"], callback_data=f"decision:paused:{case_id}")],
     ])
 
 
@@ -154,25 +127,16 @@ async def resolve_case_decision(case_id: str):
     return {"ready": True, "status": "continues", "text_key": "decision_mixed", "a_id": a_id, "b_id": b_id}
 
 
-async def decision_keyboard(user_id: int, case_id: str) -> InlineKeyboardMarkup:
-    texts = TEXTS[await get_lang(user_id)]
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=texts["decision_resolve"], callback_data=f"decision:resolved:{case_id}")],
-        [InlineKeyboardButton(text=texts["decision_continue"], callback_data=f"decision:continues:{case_id}")],
-        [InlineKeyboardButton(text=texts["decision_pause"], callback_data=f"decision:paused:{case_id}")],
-    ])
-
-
 @dp.callback_query(F.data.startswith("menu:"))
 async def main_menu_action(callback: CallbackQuery, state: FSMContext):
     action = callback.data.split(":", 1)[1]
     await callback.answer("OK")
     if action == "newcase":
-        await new_case(callback.message, state, user_id=callback.from_user.id)
+        await new_case(callback.message, state)
     elif action == "mycases":
         await my_cases(callback.message, user_id=callback.from_user.id)
     elif action == "feedback":
-        await feedback(callback.message, state, user_id=callback.from_user.id)
+        await feedback(callback.message, state)
 
 
 @dp.callback_query(F.data.startswith("discussion:"))
@@ -192,15 +156,15 @@ async def discussion_action(callback: CallbackQuery, state: FSMContext):
             )
             row = await cursor.fetchone()
         if not row:
-            await callback.message.answer(await t(user_id, "case_access_denied"))
+            await callback.message.answer(await t("case_access_denied"))
             return
         title, conflict_period = row
         invite_link = await create_start_link(bot, f"join_{join_code}", encode=True)
         invite_text = (
-            f"{await t(user_id, 'invite_title')}\n\n"
-            f"{await format_case_header(user_id, title, conflict_period)}\n\n"
-            f"{await t(user_id, 'invite_link')}\n{invite_link}\n\n"
-            f"{await t(user_id, 'invite_forward')}"
+            f"{await t('invite_title')}\n\n"
+            f"{format_case_header(title, conflict_period)}\n\n"
+            f"{await t('invite_link')}\n{invite_link}\n\n"
+            f"{await t('invite_forward')}"
         )
         await callback.message.answer(invite_text)
         return
@@ -212,64 +176,58 @@ async def discussion_action(callback: CallbackQuery, state: FSMContext):
             )
             row = await cursor.fetchone()
         if not row:
-            await callback.message.answer(await t(user_id, "case_access_denied"))
+            await callback.message.answer(await t("case_access_denied"))
             return
         case_id, status, a_id, b_id, title, conflict_period = row
         if status in {"analysis_ready", "continues"}:
-            await callback.message.answer(await t(user_id, "decision_prompt"), reply_markup=await decision_keyboard(user_id, case_id))
+            await callback.message.answer(await t("decision_prompt"), reply_markup=decision_keyboard(case_id))
             return
         if status in {"waiting_for_b", "intake_b"} and user_id == a_id:
-            await callback.message.answer(await next_step_hint(user_id, status))
+            await callback.message.answer(next_step_hint(status))
             return
         if status in {"intake", "intake_a"} and user_id == a_id:
-            questions = await get_questions(user_id)
+            questions = TEXTS["questions"]
             async with await get_db() as db:
                 cursor = await db.execute("SELECT COUNT(*) FROM intake_answers WHERE case_id = ? AND user_id = ?", (case_id, user_id))
                 answered = (await cursor.fetchone())[0]
             if answered < len(questions):
                 await state.set_state(IntakeStates.waiting_answers)
                 await state.update_data(case_id=case_id, role="A", question_index=answered, share_mode="summary")
-                await callback.message.answer(f"{await format_case_header(user_id, title, conflict_period)}\n\n{questions[answered][1]}")
+                await callback.message.answer(f"{format_case_header(title, conflict_period)}\n\n{questions[answered][1]}")
                 return
         if status in {"intake", "intake_b"} and user_id == b_id:
-            questions = await get_questions(user_id)
+            questions = TEXTS["questions"]
             async with await get_db() as db:
                 cursor = await db.execute("SELECT COUNT(*) FROM intake_answers WHERE case_id = ? AND user_id = ?", (case_id, user_id))
                 answered = (await cursor.fetchone())[0]
             if answered < len(questions):
                 await state.set_state(IntakeStates.waiting_answers)
                 await state.update_data(case_id=case_id, role="B", question_index=answered, share_mode="summary")
-                await callback.message.answer(f"{await format_case_header(user_id, title, conflict_period)}\n\n{questions[answered][1]}")
+                await callback.message.answer(f"{format_case_header(title, conflict_period)}\n\n{questions[answered][1]}")
                 return
-        await callback.message.answer(await next_step_hint(user_id, status))
+        await callback.message.answer(next_step_hint(status))
         return
     if action == "feedback":
         await state.set_state(IntakeStates.waiting_feedback)
         await state.update_data(feedback_case_code=join_code)
-        await callback.message.answer(await t(user_id, "feedback_choose"), reply_markup=await feedback_keyboard(user_id))
-        await callback.message.answer(await t(user_id, "feedback_prompt"))
+        await callback.message.answer(await t("feedback_choose"), reply_markup=feedback_keyboard())
+        await callback.message.answer(await t("feedback_prompt"))
         return
     if action == "delete":
         async with await get_db() as db:
-            cursor = await db.execute(
-                "SELECT id FROM cases WHERE join_code = ? AND creator_user_id = ?",
-                (join_code, user_id),
-            )
+            cursor = await db.execute("SELECT id FROM cases WHERE join_code = ? AND creator_user_id = ?", (join_code, user_id))
             row = await cursor.fetchone()
         if not row:
-            await callback.message.answer(await t(user_id, "case_access_denied"))
+            await callback.message.answer(await t("case_access_denied"))
             return
-        await callback.message.answer(await t(user_id, "delete_confirm"), reply_markup=await delete_confirm_keyboard(user_id, join_code))
+        await callback.message.answer(await t("delete_confirm"), reply_markup=delete_confirm_keyboard(join_code))
         return
     if action == "delete_confirm":
         async with await get_db() as db:
-            cursor = await db.execute(
-                "SELECT id FROM cases WHERE join_code = ? AND creator_user_id = ?",
-                (join_code, user_id),
-            )
+            cursor = await db.execute("SELECT id FROM cases WHERE join_code = ? AND creator_user_id = ?", (join_code, user_id))
             row = await cursor.fetchone()
             if not row:
-                await callback.message.answer(await t(user_id, "case_access_denied"))
+                await callback.message.answer(await t("case_access_denied"))
                 return
             case_id = row[0]
             await db.execute("DELETE FROM case_actions WHERE case_id = ?", (case_id,))
@@ -277,10 +235,10 @@ async def discussion_action(callback: CallbackQuery, state: FSMContext):
             await db.execute("DELETE FROM feedback WHERE case_id = ?", (case_id,))
             await db.execute("DELETE FROM cases WHERE id = ?", (case_id,))
             await db.commit()
-        await callback.message.answer(await t(user_id, "discussion_deleted"))
+        await callback.message.answer(await t("discussion_deleted"))
         return
     if action == "delete_cancel":
-        await callback.message.answer(await t(user_id, "outside_text"))
+        await callback.message.answer(await t("outside_text"))
 
 
 @dp.callback_query(F.data.startswith("decision:"))
@@ -294,12 +252,12 @@ async def decision_action(callback: CallbackQuery):
         )
         await db.commit()
     await callback.answer("OK")
-    await callback.message.answer(await t(user_id, "decision_saved"))
+    await callback.message.answer(await t("decision_saved"))
     result = await resolve_case_decision(case_id)
     if not result:
         return
     if not result["ready"]:
-        await callback.message.answer(await t(user_id, "decision_wait_other"))
+        await callback.message.answer(await t("decision_wait_other"))
         return
     async with await get_db() as db:
         await db.execute("UPDATE cases SET status = ?, updated_at = ? WHERE id = ?", (result["status"], await now_iso(), case_id))
@@ -307,7 +265,7 @@ async def decision_action(callback: CallbackQuery):
     for uid in [result["a_id"], result["b_id"]]:
         if uid:
             try:
-                await bot.send_message(uid, await t(uid, result["text_key"]))
+                await bot.send_message(uid, await t(result["text_key"]))
             except Exception:
                 logger.exception("Failed to send decision result")
 
@@ -322,16 +280,14 @@ async def start(message: Message, state: FSMContext, command: CommandObject):
             fake_command = CommandObject(prefix="/", command="join", args=join_code)
             await join_case(message, fake_command, state)
             return
-    texts = TEXTS[await get_lang(message.from_user.id)]
-    await message.answer(await t(message.from_user.id, "intro"), reply_markup=main_menu_keyboard(texts))
+    await message.answer(await t("intro"), reply_markup=main_menu_keyboard())
 
 
 @dp.message(Command("newcase"))
-async def new_case(message: Message, state: FSMContext, user_id: int | None = None):
-    user_id = user_id or message.from_user.id
+async def new_case(message: Message, state: FSMContext):
     await state.clear()
     await state.set_state(IntakeStates.waiting_case_title)
-    await message.answer(await t(user_id, "newcase_prompt"))
+    await message.answer(await t("newcase_prompt"))
 
 
 @dp.message(IntakeStates.waiting_case_title)
@@ -341,112 +297,74 @@ async def receive_case_title(message: Message, state: FSMContext):
     title = message.text.strip()
     created_at = await now_iso()
     async with await get_db() as db:
-        await db.execute(
-            "INSERT INTO cases (id, creator_user_id, participant_a_user_id, title, join_code, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (case_id, message.from_user.id, message.from_user.id, title, join_code, "waiting_for_b", created_at, created_at),
-        )
+        await db.execute("INSERT INTO cases (id, creator_user_id, participant_a_user_id, title, join_code, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (case_id, message.from_user.id, message.from_user.id, title, join_code, "waiting_for_b", created_at, created_at))
         await db.commit()
     invite_link = await create_start_link(bot, f"join_{join_code}", encode=True)
-    invite_text = (
-        f"{await t(message.from_user.id, 'invite_title')}\n\n"
-        f"{await format_case_header(message.from_user.id, title)}\n\n"
-        f"{await t(message.from_user.id, 'invite_link')}\n{invite_link}\n\n"
-        f"{await t(message.from_user.id, 'invite_forward')}"
-    )
-    questions = await get_questions(message.from_user.id)
+    invite_text = f"{await t('invite_title')}\n\n{format_case_header(title)}\n\n{await t('invite_link')}\n{invite_link}\n\n{await t('invite_forward')}"
+    questions = TEXTS["questions"]
     await state.set_state(IntakeStates.waiting_answers)
     await state.update_data(case_id=case_id, role="A", question_index=0, share_mode="summary")
     await message.answer(invite_text)
-    await message.answer(
-        f"{await t(message.from_user.id, 'your_side_intro')}\n\n"
-        f"{await format_case_header(message.from_user.id, title)}\n\n"
-        f"{questions[0][1]}"
-    )
+    await message.answer(f"{await t('your_side_intro')}\n\n{format_case_header(title)}\n\n{questions[0][1]}")
 
 
 @dp.message(Command("join"))
 async def join_case(message: Message, command: CommandObject, state: FSMContext):
     if not command.args:
-        await message.answer(await t(message.from_user.id, "join_usage"))
+        await message.answer(await t("join_usage"))
         return
     join_code = command.args.strip()
     async with await get_db() as db:
         cursor = await db.execute("SELECT id, participant_a_user_id, participant_b_user_id, title, conflict_period FROM cases WHERE join_code = ?", (join_code,))
         row = await cursor.fetchone()
         if not row:
-            await message.answer(await t(message.from_user.id, "case_not_found"))
+            await message.answer(await t("case_not_found"))
             return
         case_id, participant_a_user_id, participant_b_user_id, title, conflict_period = row
         if participant_b_user_id and participant_b_user_id != message.from_user.id:
-            await message.answer(await t(message.from_user.id, "case_already_joined"))
+            await message.answer(await t("case_already_joined"))
             return
         await db.execute("UPDATE cases SET participant_b_user_id = ?, status = ?, updated_at = ? WHERE id = ?", (message.from_user.id, "intake", await now_iso(), case_id))
         await db.commit()
-    questions = await get_questions(message.from_user.id)
+    questions = TEXTS["questions"]
     await state.set_state(IntakeStates.waiting_answers)
     await state.update_data(case_id=case_id, role="B", question_index=0, share_mode="summary")
-    await message.answer(
-        f"{await t(message.from_user.id, 'joined_intro')}\n\n"
-        f"{await format_case_header(message.from_user.id, title, conflict_period)}\n\n"
-        f"{await t(message.from_user.id, 'start_questions')}\n\n"
-        f"{questions[0][1]}"
-    )
+    await message.answer(f"{await t('joined_intro')}\n\n{format_case_header(title, conflict_period)}\n\n{await t('start_questions')}\n\n{questions[0][1]}")
     try:
-        a_lang = await get_lang(participant_a_user_id)
-        a_questions = TEXTS[a_lang]["questions"]
-        await bot.send_message(
-            participant_a_user_id,
-            f"{TEXTS[a_lang]['participant_joined']}\n\n"
-            f"{await format_case_header(participant_a_user_id, title, conflict_period)}\n\n"
-            f"{TEXTS[a_lang]['answer_questions']}\n\n"
-            f"{a_questions[0][1]}",
-        )
+        await bot.send_message(participant_a_user_id, f"{await t('participant_joined')}\n\n{format_case_header(title, conflict_period)}\n\n{await t('answer_questions')}\n\n{questions[0][1]}")
     except Exception:
         logger.exception("Failed to notify participant A")
 
 
 @dp.message(Command("feedback"))
-async def feedback(message: Message, state: FSMContext, user_id: int | None = None):
-    user_id = user_id or message.from_user.id
+async def feedback(message: Message, state: FSMContext):
     await state.set_state(IntakeStates.waiting_feedback)
-    await message.answer(await t(user_id, "feedback_choose"), reply_markup=await feedback_keyboard(user_id))
-    await message.answer(await t(user_id, "feedback_prompt"))
+    await message.answer(await t("feedback_choose"), reply_markup=feedback_keyboard())
+    await message.answer(await t("feedback_prompt"))
 
 
 @dp.message(Command("case"))
 async def case_view(message: Message, command: CommandObject, user_id: int | None = None):
     user_id = user_id or message.from_user.id
     if not command.args:
-        await message.answer(await t(user_id, "case_usage"))
+        await message.answer(await t("case_usage"))
         return
     join_code = command.args.strip()
     async with await get_db() as db:
-        cursor = await db.execute(
-            "SELECT title, conflict_period, status, summary_a, summary_b, common_ground, differences, options_text FROM cases WHERE join_code = ? AND (participant_a_user_id = ? OR participant_b_user_id = ?)",
-            (join_code, user_id, user_id),
-        )
+        cursor = await db.execute("SELECT title, conflict_period, status, summary_a, summary_b, common_ground, differences, options_text FROM cases WHERE join_code = ? AND (participant_a_user_id = ? OR participant_b_user_id = ?)", (join_code, user_id, user_id))
         row = await cursor.fetchone()
     if not row:
-        await message.answer(await t(user_id, "case_access_denied"))
+        await message.answer(await t("case_access_denied"))
         return
     title, conflict_period, status, summary_a, summary_b, common_ground, differences, options_text = row
-    texts = TEXTS[await get_lang(user_id)]
-    body = [
-        await format_case_header(user_id, title, conflict_period),
-        f"{texts['status']}: {await human_status(user_id, status)}",
-        f"{texts['next_step']}: {await next_step_hint(user_id, status)}",
-    ]
+    body = [format_case_header(title, conflict_period), f"{await t('status')}: {human_status(status)}", f"{await t('next_step')}: {next_step_hint(status)}"]
     if summary_a:
-        body.append(f"\n{texts['side_a']}:\n{summary_a}")
-    if summary_b:
-        body.append(f"\n{texts['side_b']}:\n{summary_b}")
-    if common_ground:
-        body.append(f"\n{texts['common_ground']}:\n{common_ground}")
-    if differences:
-        body.append(f"\n{texts['differences']}:\n{differences}")
-    if options_text:
-        body.append(f"\n{texts['options']}:\n{options_text}")
-    await message.answer("\n".join(body), reply_markup=await discussion_actions_keyboard(user_id, join_code, status))
+        body.append(f"\n{await t('side_a')}:\n{summary_a}")
+        body.append(f"\n{await t('side_b')}:\n{summary_b}")
+        body.append(f"\n{await t('common_ground')}:\n{common_ground}")
+        body.append(f"\n{await t('differences')}:\n{differences}")
+        body.append(f"\n{await t('options')}:\n{options_text}")
+    await message.answer("\n".join(body), reply_markup=discussion_actions_keyboard(join_code, status))
 
 
 @dp.message(Command("mycases"))
@@ -456,25 +374,20 @@ async def my_cases(message: Message, user_id: int | None = None):
         cursor = await db.execute("SELECT title, conflict_period, join_code, status FROM cases WHERE participant_a_user_id = ? OR participant_b_user_id = ? ORDER BY created_at DESC LIMIT 10", (user_id, user_id))
         rows = await cursor.fetchall()
     if not rows:
-        await message.answer(await t(user_id, "no_cases"))
+        await message.answer(await t("no_cases"))
         return
-    await message.answer(await t(user_id, "my_cases"))
+    await message.answer(await t("my_cases"))
     for title, conflict_period, code, status in rows:
-        text = (
-            f"{await format_case_header(user_id, title, conflict_period)}\n"
-            f"{await t(user_id, 'status')}: {await human_status(user_id, status)}\n"
-            f"{await t(user_id, 'code_label')}: `{code}`"
-        )
-        await message.answer(text, parse_mode="Markdown", reply_markup=await discussion_actions_keyboard(user_id, code, status))
+        text = f"{format_case_header(title, conflict_period)}\n{await t('status')}: {human_status(status)}\n{await t('code_label')}: `{code}`"
+        await message.answer(text, parse_mode="Markdown", reply_markup=discussion_actions_keyboard(code, status))
 
 
 @dp.callback_query(F.data.startswith("feedback_area:"))
 async def feedback_area_selected(callback: CallbackQuery, state: FSMContext):
     area = callback.data.split(":", 1)[1]
     await state.update_data(feedback_area=area)
-    texts = TEXTS[await get_lang(callback.from_user.id)]
     await callback.answer("OK")
-    await callback.message.answer(f"{texts['feedback_area_selected']} {texts['feedback_areas'].get(area, area)}. {texts['write_comment']}")
+    await callback.message.answer(f"{await t('feedback_area_selected')} {TEXTS['feedback_areas'].get(area, area)}. {await t('write_comment')}")
 
 
 @dp.message(F.text, IntakeStates.waiting_feedback)
@@ -495,10 +408,10 @@ async def handle_feedback(message: Message, state: FSMContext):
         await db.execute("INSERT INTO feedback (case_id, user_id, area, feedback_text, created_at) VALUES (?, ?, ?, ?, ?)", (case_id, message.from_user.id, area, feedback_text, await now_iso()))
         await db.commit()
     await state.clear()
-    await message.answer(await t(message.from_user.id, "feedback_saved"))
+    await message.answer(await t("feedback_saved"))
     if settings.owner_telegram_id:
         try:
-            area_label = TEXTS[await get_lang(message.from_user.id)]["feedback_areas"].get(area, area)
+            area_label = TEXTS["feedback_areas"].get(area, area)
             owner_text = (
                 "Новый отзыв о боте\n\n"
                 f"От пользователя: {message.from_user.id}\n"
@@ -518,15 +431,10 @@ async def handle_intake_answer(message: Message, state: FSMContext):
     case_id = data["case_id"]
     role = data["role"]
     idx = data.get("question_index", 0)
-    share_mode = data.get("share_mode", "summary")
-    questions = await get_questions(user_id)
+    questions = TEXTS["questions"]
     question_key, _ = questions[idx]
-    stored_text = message.text.strip() if share_mode != "private" else f"[PRIVATE] {message.text.strip()}"
     async with await get_db() as db:
-        await db.execute(
-            "INSERT INTO intake_answers (case_id, user_id, role, question_key, answer_text, created_at, share_mode) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (case_id, user_id, role, question_key, stored_text, await now_iso(), share_mode),
-        )
+        await db.execute("INSERT INTO intake_answers (case_id, user_id, role, question_key, answer_text, created_at, share_mode) VALUES (?, ?, ?, ?, ?, ?, ?)", (case_id, user_id, role, question_key, message.text.strip(), await now_iso(), 'summary'))
         if question_key == "conflict_date":
             await db.execute("UPDATE cases SET conflict_period = COALESCE(conflict_period, ?), updated_at = ?, status = ? WHERE id = ?", (message.text.strip(), await now_iso(), f"intake_{role.lower()}", case_id))
         else:
@@ -535,12 +443,12 @@ async def handle_intake_answer(message: Message, state: FSMContext):
     idx += 1
     if idx < len(questions):
         await state.update_data(question_index=idx, share_mode="summary")
-        await message.answer(await t(user_id, "thinking_next"))
-        await message.answer(f"{questions[idx][1]}")
+        await message.answer(await t("thinking_next"))
+        await message.answer(questions[idx][1])
         return
     await state.clear()
-    await message.answer(await t(user_id, "position_saved"))
-    await message.answer(await t(user_id, "thinking_analysis"))
+    await message.answer(await t("position_saved"))
+    await message.answer(await t("thinking_analysis"))
     await maybe_finalize_case(case_id)
 
 
@@ -556,16 +464,13 @@ async def maybe_finalize_case(case_id: str):
     grouped = {"A": [], "B": []}
     for role, qkey, text in answers:
         grouped[role].append(f"{qkey}: {text}")
-    lang_a = await get_lang(a_id)
-    lang_b = await get_lang(b_id)
-    if len(grouped["A"]) < len(TEXTS[lang_a]["questions"]) or len(grouped["B"]) < len(TEXTS[lang_b]["questions"]):
+    if len(grouped["A"]) < len(TEXTS["questions"]) or len(grouped["B"]) < len(TEXTS["questions"]):
         return
     async with await get_db() as db:
         await db.execute("UPDATE cases SET status = ?, updated_at = ? WHERE id = ?", ("analyzing", await now_iso(), case_id))
         await db.commit()
     try:
         analysis_ru = await asyncio.wait_for(analyze_positions("\n".join(grouped["A"]), "\n".join(grouped["B"]), language="ru"), timeout=60)
-        analysis_en = await asyncio.wait_for(analyze_positions("\n".join(grouped["A"]), "\n".join(grouped["B"]), language="en"), timeout=60)
     except Exception:
         logger.exception("Failed to analyze case %s", case_id)
         async with await get_db() as db:
@@ -574,48 +479,40 @@ async def maybe_finalize_case(case_id: str):
         for uid in [a_id, b_id]:
             if uid:
                 try:
-                    await bot.send_message(uid, await t(uid, "analysis_failed"))
+                    await bot.send_message(uid, await t("analysis_failed"))
                 except Exception:
                     logger.exception("Failed to send analysis failure notice")
         return
     options_text_ru = "\n".join([f"{i+1}. {opt}" for i, opt in enumerate(analysis_ru["options"])])
     async with await get_db() as db:
-        await db.execute(
-            "UPDATE cases SET status = ?, updated_at = ?, summary_a = ?, summary_b = ?, common_ground = ?, differences = ?, options_text = ? WHERE id = ?",
-            ("analysis_ready", await now_iso(), analysis_ru["summary_a"], analysis_ru["summary_b"], analysis_ru["common_ground"], analysis_ru["differences"], options_text_ru, case_id),
-        )
+        await db.execute("UPDATE cases SET status = ?, updated_at = ?, summary_a = ?, summary_b = ?, common_ground = ?, differences = ?, options_text = ? WHERE id = ?", ("analysis_ready", await now_iso(), analysis_ru["summary_a"], analysis_ru["summary_b"], analysis_ru["common_ground"], analysis_ru["differences"], options_text_ru, case_id))
         await db.commit()
+    report = (
+        f"{format_case_header(title, conflict_period)}\n\n"
+        f"{await t('side_a')}:\n{analysis_ru['summary_a']}\n\n"
+        f"{await t('side_b')}:\n{analysis_ru['summary_b']}\n\n"
+        f"{await t('common_ground')}:\n{analysis_ru['common_ground']}\n\n"
+        f"{await t('differences')}:\n{analysis_ru['differences']}\n\n"
+        f"{await t('options')}:\n{options_text_ru}"
+    )
     for uid in [a_id, b_id]:
-        if not uid:
-            continue
-        user_lang = await get_lang(uid)
-        texts = TEXTS[user_lang]
-        analysis = analysis_ru if user_lang == "ru" else analysis_en
-        options_text = "\n".join([f"{i+1}. {opt}" for i, opt in enumerate(analysis["options"])])
-        report = (
-            f"{await format_case_header(uid, title, conflict_period)}\n\n"
-            f"{texts['side_a']}:\n{analysis['summary_a']}\n\n"
-            f"{texts['side_b']}:\n{analysis['summary_b']}\n\n"
-            f"{texts['common_ground']}:\n{analysis['common_ground']}\n\n"
-            f"{texts['differences']}:\n{analysis['differences']}\n\n"
-            f"{texts['options']}:\n{options_text}"
-        )
-        try:
-            await bot.send_message(uid, report)
-            await bot.send_message(uid, texts["decision_prompt"], reply_markup=await decision_keyboard(uid, case_id))
-            await bot.send_message(uid, texts["feedback_nudge"])
-        except Exception:
-            logger.exception("Failed to send report")
+        if uid:
+            try:
+                await bot.send_message(uid, report)
+                await bot.send_message(uid, await t("decision_prompt"), reply_markup=decision_keyboard(case_id))
+                await bot.send_message(uid, await t("feedback_nudge"))
+            except Exception:
+                logger.exception("Failed to send report")
 
 
 @dp.message(F.text.startswith("/"))
 async def unknown_command(message: Message):
-    await message.answer(await t(message.from_user.id, "unknown_command"))
+    await message.answer(await t("unknown_command"))
 
 
 @dp.message(F.text)
 async def outside_dialog_text(message: Message):
-    await message.answer(await t(message.from_user.id, "outside_text"), reply_markup=main_menu_keyboard(TEXTS[await get_lang(message.from_user.id)]))
+    await message.answer(await t("outside_text"), reply_markup=main_menu_keyboard())
 
 
 async def setup_bot_commands():
