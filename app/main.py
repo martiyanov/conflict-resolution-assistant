@@ -150,10 +150,10 @@ async def discussion_action(callback: CallbackQuery, state: FSMContext):
         title, conflict_period = row
         invite_link = await create_start_link(bot, f"join_{join_code}", encode=True)
         invite_text = (
-            f"{await t('invite_title')}\n\n"
+            f"Вас пригласили в обсуждение конфликта.\n\n"
             f"{format_case_header(title, conflict_period)}\n\n"
-            f"{await t('invite_link')}\n{invite_link}\n\n"
-            f"{await t('invite_forward')}"
+            f"Бот поможет спокойно разобрать ситуацию и по очереди задаст вопросы обеим сторонам.\n\n"
+            f"Чтобы присоединиться, откройте ссылку:\n{invite_link}"
         )
         await callback.message.answer(invite_text)
         return
@@ -288,7 +288,12 @@ async def receive_case_title(message: Message, state: FSMContext):
         await db.execute("INSERT INTO cases (id, creator_user_id, participant_a_user_id, title, join_code, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)", (case_id, message.from_user.id, message.from_user.id, title, join_code, "waiting_for_b", created_at, created_at))
         await db.commit()
     invite_link = await create_start_link(bot, f"join_{join_code}", encode=True)
-    invite_text = f"{await t('invite_title')}\n\n{format_case_header(title)}\n\n{await t('invite_link')}\n{invite_link}\n\n{await t('invite_forward')}"
+    invite_text = (
+        f"Вас пригласили в обсуждение конфликта.\n\n"
+        f"{format_case_header(title)}\n\n"
+        f"Бот поможет спокойно разобрать ситуацию и по очереди задаст вопросы обеим сторонам.\n\n"
+        f"Чтобы присоединиться, откройте ссылку:\n{invite_link}"
+    )
     questions = TEXTS["questions"]
     await state.set_state(IntakeStates.waiting_answers)
     await state.update_data(case_id=case_id, role="A", question_index=0, share_mode="summary")
