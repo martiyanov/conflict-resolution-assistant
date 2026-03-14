@@ -6,10 +6,12 @@ Telegram MVP for structured two-party conflict mediation.
 
 - supports Russian and English
 - asks the user to choose a language
-- creates a conflict case
+- shows a button-based main menu
+- responds to ordinary text outside active dialogs with guidance instead of silently ignoring it
+- creates a conflict discussion
 - generates a shareable invite link for the second participant
 - shows the conflict topic and period in the flow
-- collects intake answers from each side
+- collects answers from each side
 - lets each answer be marked as:
   - summary only
   - fully private
@@ -23,14 +25,15 @@ Telegram MVP for structured two-party conflict mediation.
 
 ## Commands
 
-- `/start` — intro
-- `/newcase` — create a new case
-- `/join CODE` — join a case
-- `/mycases` — list your cases
-- `/case CODE` — view a specific case
+- `/start` — intro and main menu
+- `/newcase` — create a new discussion
+- `/join CODE` — join a discussion
+- `/mycases` — list your discussions
+- `/case CODE` — view a specific discussion
 - `/feedback` — leave short feedback
 
 Unknown commands return a short help message.
+Regular text outside active dialogs returns guidance and the main menu.
 
 ## Stack
 

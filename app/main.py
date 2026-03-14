@@ -76,6 +76,15 @@ def language_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
+def main_menu_keyboard(texts: dict) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=texts["menu_create"], callback_data="menu:newcase")],
+        [InlineKeyboardButton(text=texts["menu_list"], callback_data="menu:mycases")],
+        [InlineKeyboardButton(text=texts["menu_feedback"], callback_data="menu:feedback")],
+        [InlineKeyboardButton(text=texts["menu_language"], callback_data="menu:language")],
+    ])
+
+
 async def share_mode_keyboard(user_id: int) -> InlineKeyboardMarkup:
     lang = await get_lang(user_id)
     texts = TEXTS[lang]
@@ -113,7 +122,21 @@ async def language_selected(callback: CallbackQuery, state: FSMContext):
     await set_lang(callback.from_user.id, lang)
     await callback.answer("OK")
     await callback.message.answer(TEXTS[lang]["lang_set"])
-    await callback.message.answer(TEXTS[lang]["intro"])
+    await callback.message.answer(TEXTS[lang]["intro"], reply_markup=main_menu_keyboard(TEXTS[lang]))
+
+
+@dp.callback_query(F.data.startswith("menu:"))
+async def main_menu_action(callback: CallbackQuery, state: FSMContext):
+    action = callback.data.split(":", 1)[1]
+    await callback.answer("OK")
+    if action == "newcase":
+        await new_case(callback.message, state)
+    elif action == "mycases":
+        await my_cases(callback.message)
+    elif action == "feedback":
+        await feedback(callback.message, state)
+    elif action == "language":
+        await callback.message.answer(LANGUAGE_CHOOSER, reply_markup=language_keyboard())
 
 
 @dp.message(Command("start"))
@@ -129,7 +152,8 @@ async def start(message: Message, state: FSMContext, command: CommandObject):
     lang = await get_lang(message.from_user.id)
     if lang not in TEXTS or lang == "ru":
         await message.answer(LANGUAGE_CHOOSER, reply_markup=language_keyboard())
-    await message.answer(await t(message.from_user.id, "intro"))
+    texts = TEXTS[await get_lang(message.from_user.id)]
+    await message.answer(await t(message.from_user.id, "intro"), reply_markup=main_menu_keyboard(texts))
 
 
 @dp.message(Command("newcase"))
@@ -388,6 +412,11 @@ async def maybe_finalize_case(case_id: str):
 @dp.message(F.text.startswith("/"))
 async def unknown_command(message: Message):
     await message.answer(await t(message.from_user.id, "unknown_command"))
+
+
+@dp.message(F.text)
+async def outside_dialog_text(message: Message):
+    await message.answer(await t(message.from_user.id, "outside_text"), reply_markup=main_menu_keyboard(TEXTS[await get_lang(message.from_user.id)]))
 
 
 async def on_startup():
