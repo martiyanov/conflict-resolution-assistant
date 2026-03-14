@@ -13,7 +13,7 @@ TEXTS = {
     "start_questions": "Начнём с короткого опроса.",
     "participant_joined": "Второй участник присоединился. Можно продолжить.",
     "answer_questions": "Ответьте на вопросы.",
-    "feedback_prompt": "Напишите отзыв.",
+    "feedback_prompt": "Напишите отзыв.\n\nЕсли бот оказался полезным, можно отблагодарить разработчика:\nhttps://t.me/tribute/app?startapp=dHaW",
     "case_usage": "Использование: /case CODE",
     "case_access_denied": "Обсуждение не найдено или у Вас нет к нему доступа.",
     "status": "Статус",
@@ -39,7 +39,7 @@ TEXTS = {
     "thinking_next": "Принято. Сейчас пришлю следующий вопрос.",
     "thinking_analysis": "Принято. Сейчас подготовлю итоги для обеих сторон.",
     "position_saved": "Спасибо, всё записано.",
-    "feedback_nudge": "Если захотите, можете оставить отзыв.",
+    "feedback_nudge": "Если захотите, можете оставить отзыв или отблагодарить разработчика: https://t.me/tribute/app?startapp=dHaW",
     "topic": "Тема конфликта",
     "period": "Когда/период",
     "questions": [
