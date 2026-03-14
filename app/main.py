@@ -15,7 +15,7 @@ from aiogram.utils.deep_linking import create_start_link, decode_payload
 from app.config import settings
 from app.db import init_db
 from app.llm import analyze_positions
-from app.texts import FEEDBACK_PROMPT, INTRO, QUESTIONS, SHARE_MODE_TEXT, THINKING_ANALYSIS, THINKING_NEXT_QUESTION
+from app.texts import FEEDBACK_PROMPT, INTRO, QUESTIONS, SHARE_MODE_TEXT, THINKING_ANALYSIS, THINKING_NEXT_QUESTION, UNKNOWN_COMMAND
 
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
@@ -356,6 +356,11 @@ async def maybe_finalize_case(case_id: str):
 
 async def on_startup():
     await init_db(settings.database_path)
+
+
+@dp.message(F.text.startswith("/"))
+async def unknown_command(message: Message):
+    await message.answer(UNKNOWN_COMMAND)
 
 
 async def main():
