@@ -51,17 +51,6 @@ def main_menu_keyboard() -> InlineKeyboardMarkup:
     ])
 
 
-def feedback_keyboard() -> InlineKeyboardMarkup:
-    areas = TEXTS["feedback_areas"]
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=areas["questions"], callback_data="feedback_area:questions")],
-        [InlineKeyboardButton(text=areas["flow"], callback_data="feedback_area:flow")],
-        [InlineKeyboardButton(text=areas["summary"], callback_data="feedback_area:summary")],
-        [InlineKeyboardButton(text=areas["ux"], callback_data="feedback_area:ux")],
-        [InlineKeyboardButton(text=areas["other"], callback_data="feedback_area:other")],
-    ])
-
-
 def format_case_header(title: str, conflict_period: str | None = None) -> str:
     header = f"{TEXTS['topic']}: {title}"
     if conflict_period:
@@ -209,8 +198,7 @@ async def discussion_action(callback: CallbackQuery, state: FSMContext):
         return
     if action == "feedback":
         await state.set_state(IntakeStates.waiting_feedback)
-        await state.update_data(feedback_case_code=join_code)
-        await callback.message.answer(await t("feedback_choose"), reply_markup=feedback_keyboard())
+        await state.update_data(feedback_case_code=join_code, feedback_area="other")
         await callback.message.answer(await t("feedback_prompt"))
         return
     if action == "delete":
@@ -339,7 +327,7 @@ async def join_case(message: Message, command: CommandObject, state: FSMContext)
 @dp.message(Command("feedback"))
 async def feedback(message: Message, state: FSMContext):
     await state.set_state(IntakeStates.waiting_feedback)
-    await message.answer(await t("feedback_choose"), reply_markup=feedback_keyboard())
+    await state.update_data(feedback_area="other")
     await message.answer(await t("feedback_prompt"))
 
 
@@ -380,14 +368,6 @@ async def my_cases(message: Message, user_id: int | None = None):
     for title, conflict_period, code, status in rows:
         text = f"{format_case_header(title, conflict_period)}\n{await t('status')}: {human_status(status)}\n{await t('code_label')}: `{code}`"
         await message.answer(text, parse_mode="Markdown", reply_markup=discussion_actions_keyboard(code, status))
-
-
-@dp.callback_query(F.data.startswith("feedback_area:"))
-async def feedback_area_selected(callback: CallbackQuery, state: FSMContext):
-    area = callback.data.split(":", 1)[1]
-    await state.update_data(feedback_area=area)
-    await callback.answer("OK")
-    await callback.message.answer(f"{await t('feedback_area_selected')} {TEXTS['feedback_areas'].get(area, area)}. {await t('write_comment')}")
 
 
 @dp.message(F.text, IntakeStates.waiting_feedback)
