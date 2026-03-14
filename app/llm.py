@@ -1,3 +1,5 @@
+import json
+
 from openai import AsyncOpenAI
 
 from app.config import settings
@@ -47,4 +49,9 @@ Participant B:
             "additionalProperties": False
         }}},
     )
-    return response.output_parsed
+    if hasattr(response, 'output_parsed') and response.output_parsed:
+        return response.output_parsed
+    text = getattr(response, 'output_text', None)
+    if not text:
+        raise ValueError('OpenAI response did not contain parsed or text output')
+    return json.loads(text)

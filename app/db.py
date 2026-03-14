@@ -45,6 +45,15 @@ CREATE TABLE IF NOT EXISTS user_settings (
   language TEXT NOT NULL DEFAULT 'ru',
   updated_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS case_actions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  case_id TEXT NOT NULL,
+  user_id INTEGER NOT NULL,
+  action TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  UNIQUE(case_id, user_id)
+);
 """
 
 

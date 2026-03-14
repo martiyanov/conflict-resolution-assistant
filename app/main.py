@@ -131,6 +131,37 @@ async def discussion_actions_keyboard(user_id: int, join_code: str) -> InlineKey
     ])
 
 
+async def resolve_case_decision(case_id: str):
+    async with await get_db() as db:
+        cursor = await db.execute("SELECT participant_a_user_id, participant_b_user_id FROM cases WHERE id = ?", (case_id,))
+        row = await cursor.fetchone()
+        cursor = await db.execute("SELECT user_id, action FROM case_actions WHERE case_id = ?", (case_id,))
+        votes = dict(await cursor.fetchall())
+    if not row:
+        return None
+    a_id, b_id = row
+    if a_id not in votes or b_id not in votes:
+        return {"ready": False, "a_id": a_id, "b_id": b_id}
+    a_action = votes[a_id]
+    b_action = votes[b_id]
+    if a_action == b_action == "resolved":
+        return {"ready": True, "status": "resolved", "text_key": "decision_both_resolved", "a_id": a_id, "b_id": b_id}
+    if a_action == b_action == "continues":
+        return {"ready": True, "status": "continues", "text_key": "decision_both_continue", "a_id": a_id, "b_id": b_id}
+    if a_action == b_action == "paused":
+        return {"ready": True, "status": "paused", "text_key": "decision_both_pause", "a_id": a_id, "b_id": b_id}
+    return {"ready": True, "status": "continues", "text_key": "decision_mixed", "a_id": a_id, "b_id": b_id}
+
+
+async def decision_keyboard(user_id: int, case_id: str) -> InlineKeyboardMarkup:
+    texts = TEXTS[await get_lang(user_id)]
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=texts["decision_resolve"], callback_data=f"decision:resolved:{case_id}")],
+        [InlineKeyboardButton(text=texts["decision_continue"], callback_data=f"decision:continues:{case_id}")],
+        [InlineKeyboardButton(text=texts["decision_pause"], callback_data=f"decision:paused:{case_id}")],
+    ])
+
+
 @dp.callback_query(F.data.startswith("lang:"))
 async def language_selected(callback: CallbackQuery, state: FSMContext):
     lang = callback.data.split(":", 1)[1]
@@ -178,6 +209,35 @@ async def discussion_action(callback: CallbackQuery):
             f"{await t(callback.from_user.id, 'invite_forward')}"
         )
         await callback.message.answer(invite_text)
+
+
+@dp.callback_query(F.data.startswith("decision:"))
+async def decision_action(callback: CallbackQuery):
+    _, action, case_id = callback.data.split(":", 2)
+    user_id = callback.from_user.id
+    async with await get_db() as db:
+        await db.execute(
+            "INSERT INTO case_actions (case_id, user_id, action, created_at) VALUES (?, ?, ?, ?) ON CONFLICT(case_id, user_id) DO UPDATE SET action=excluded.action, created_at=excluded.created_at",
+            (case_id, user_id, action, await now_iso()),
+        )
+        await db.commit()
+    await callback.answer("OK")
+    await callback.message.answer(await t(user_id, "decision_saved"))
+    result = await resolve_case_decision(case_id)
+    if not result:
+        return
+    if not result["ready"]:
+        await callback.message.answer(await t(user_id, "decision_wait_other"))
+        return
+    async with await get_db() as db:
+        await db.execute("UPDATE cases SET status = ?, updated_at = ? WHERE id = ?", (result["status"], await now_iso(), case_id))
+        await db.commit()
+    for uid in [result["a_id"], result["b_id"]]:
+        if uid:
+            try:
+                await bot.send_message(uid, await t(uid, result["text_key"]))
+            except Exception:
+                logger.exception("Failed to send decision result")
 
 
 @dp.message(Command("start"))
@@ -422,8 +482,21 @@ async def maybe_finalize_case(case_id: str):
     async with await get_db() as db:
         await db.execute("UPDATE cases SET status = ?, updated_at = ? WHERE id = ?", ("analyzing", await now_iso(), case_id))
         await db.commit()
-    analysis_ru = await analyze_positions("\n".join(grouped["A"]), "\n".join(grouped["B"]), language="ru")
-    analysis_en = await analyze_positions("\n".join(grouped["A"]), "\n".join(grouped["B"]), language="en")
+    try:
+        analysis_ru = await asyncio.wait_for(analyze_positions("\n".join(grouped["A"]), "\n".join(grouped["B"]), language="ru"), timeout=60)
+        analysis_en = await asyncio.wait_for(analyze_positions("\n".join(grouped["A"]), "\n".join(grouped["B"]), language="en"), timeout=60)
+    except Exception:
+        logger.exception("Failed to analyze case %s", case_id)
+        async with await get_db() as db:
+            await db.execute("UPDATE cases SET status = ?, updated_at = ? WHERE id = ?", ("continues", await now_iso(), case_id))
+            await db.commit()
+        for uid in [a_id, b_id]:
+            if uid:
+                try:
+                    await bot.send_message(uid, await t(uid, "analysis_failed"))
+                except Exception:
+                    logger.exception("Failed to send analysis failure notice")
+        return
     options_text_ru = "\n".join([f"{i+1}. {opt}" for i, opt in enumerate(analysis_ru["options"])])
     async with await get_db() as db:
         await db.execute(
@@ -448,6 +521,7 @@ async def maybe_finalize_case(case_id: str):
         )
         try:
             await bot.send_message(uid, report)
+            await bot.send_message(uid, texts["decision_prompt"], reply_markup=await decision_keyboard(uid, case_id))
             await bot.send_message(uid, texts["feedback_nudge"])
         except Exception:
             logger.exception("Failed to send report")
