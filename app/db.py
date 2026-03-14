@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS cases (
   participant_a_user_id INTEGER,
   participant_b_user_id INTEGER,
   title TEXT,
+  conflict_period TEXT,
   join_code TEXT UNIQUE NOT NULL,
   status TEXT NOT NULL,
   created_at TEXT NOT NULL,
@@ -34,4 +35,8 @@ CREATE TABLE IF NOT EXISTS intake_answers (
 async def init_db(db_path: str):
     async with aiosqlite.connect(db_path) as db:
         await db.executescript(SCHEMA)
+        cursor = await db.execute("PRAGMA table_info(cases)")
+        columns = {row[1] for row in await cursor.fetchall()}
+        if "conflict_period" not in columns:
+            await db.execute("ALTER TABLE cases ADD COLUMN conflict_period TEXT")
         await db.commit()

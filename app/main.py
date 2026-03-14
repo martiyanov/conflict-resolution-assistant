@@ -10,11 +10,12 @@ from aiogram.filters import Command, CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
+from aiogram.utils.deep_linking import create_start_link, decode_payload
 
 from app.config import settings
 from app.db import init_db
 from app.llm import analyze_positions
-from app.texts import INTRO, QUESTIONS
+from app.texts import INTRO, QUESTIONS, THINKING_ANALYSIS, THINKING_NEXT_QUESTION
 
 
 logging.basicConfig(level=getattr(logging, settings.log_level.upper(), logging.INFO))
@@ -29,6 +30,13 @@ class IntakeStates(StatesGroup):
     waiting_answers = State()
 
 
+def format_case_header(title: str, conflict_period: str | None = None) -> str:
+    header = f"Тема конфликта: {title}"
+    if conflict_period:
+        header += f"\nКогда/период: {conflict_period}"
+    return header
+
+
 async def now_iso():
     return datetime.now(UTC).isoformat()
 
@@ -38,8 +46,15 @@ async def get_db():
 
 
 @dp.message(Command("start"))
-async def start(message: Message, state: FSMContext):
+async def start(message: Message, state: FSMContext, command: CommandObject):
     await state.clear()
+    if command.args:
+        payload = decode_payload(command.args)
+        if payload.startswith("join_"):
+            join_code = payload.removeprefix("join_")
+            fake_command = CommandObject(prefix="/", command="join", args=join_code)
+            await join_case(message, fake_command, state)
+            return
     await message.answer(INTRO)
 
 
@@ -54,6 +69,7 @@ async def new_case(message: Message, state: FSMContext):
 async def receive_case_title(message: Message, state: FSMContext):
     case_id = str(uuid.uuid4())
     join_code = secrets.token_hex(3)
+    title = message.text.strip()
     created_at = await now_iso()
     async with await get_db() as db:
         await db.execute(
@@ -61,14 +77,24 @@ async def receive_case_title(message: Message, state: FSMContext):
             INSERT INTO cases (id, creator_user_id, participant_a_user_id, title, join_code, status, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (case_id, message.from_user.id, message.from_user.id, message.text.strip(), join_code, "waiting_for_b", created_at, created_at),
+            (case_id, message.from_user.id, message.from_user.id, title, join_code, "waiting_for_b", created_at, created_at),
         )
         await db.commit()
-    await state.clear()
+    invite_link = await create_start_link(bot, f"join_{join_code}", encode=True)
+    invite_text = (
+        f"Приглашение в кейс по конфликту:\n\n"
+        f"{format_case_header(title)}\n\n"
+        f"Ссылка для второго участника:\n{invite_link}\n\n"
+        f"Можно просто переслать это сообщение собеседнику."
+    )
+    await state.set_state(IntakeStates.waiting_answers)
+    await state.update_data(case_id=case_id, role="A", question_index=0)
+    await message.answer(invite_text)
     await message.answer(
-        f"Кейс создан.\nКод приглашения: `{join_code}`\n\n"
-        f"Второй участник должен написать боту:\n`/join {join_code}`",
-        parse_mode="Markdown",
+        "А пока можешь сразу ответить на вопросы по своей стороне конфликта.\n\n"
+        + format_case_header(title)
+        + "\n\n"
+        + QUESTIONS[0][1]
     )
 
 
@@ -79,12 +105,12 @@ async def join_case(message: Message, command: CommandObject, state: FSMContext)
         return
     join_code = command.args.strip()
     async with await get_db() as db:
-        cursor = await db.execute("SELECT id, participant_a_user_id, participant_b_user_id, status FROM cases WHERE join_code = ?", (join_code,))
+        cursor = await db.execute("SELECT id, participant_a_user_id, participant_b_user_id, status, title, conflict_period FROM cases WHERE join_code = ?", (join_code,))
         row = await cursor.fetchone()
         if not row:
             await message.answer("Кейс с таким кодом не найден.")
             return
-        case_id, participant_a_user_id, participant_b_user_id, status = row
+        case_id, participant_a_user_id, participant_b_user_id, status, title, conflict_period = row
         if participant_b_user_id and participant_b_user_id != message.from_user.id:
             await message.answer("К этому кейсу уже присоединился второй участник.")
             return
@@ -95,9 +121,20 @@ async def join_case(message: Message, command: CommandObject, state: FSMContext)
         await db.commit()
     await state.set_state(IntakeStates.waiting_answers)
     await state.update_data(case_id=case_id, role="B", question_index=0)
-    await message.answer("Ты присоединился к кейсу. Начнём с короткого опроса.\n\n" + QUESTIONS[0][1])
+    await message.answer(
+        "Ты присоединился к кейсу. Ниже тема, по которой будут вопросы.\n\n"
+        + format_case_header(title, conflict_period)
+        + "\n\nНачнём с короткого опроса.\n\n"
+        + QUESTIONS[0][1]
+    )
     try:
-        await bot.send_message(participant_a_user_id, "Второй участник присоединился. Теперь ответь на 4 вопроса.\n\n" + QUESTIONS[0][1])
+        await bot.send_message(
+            participant_a_user_id,
+            "Второй участник присоединился. Теперь можно продолжать по теме:\n\n"
+            + format_case_header(title, conflict_period)
+            + "\n\nОтветь на вопросы.\n\n"
+            + QUESTIONS[0][1],
+        )
     except Exception:
         logger.exception("Failed to notify participant A")
 
@@ -106,14 +143,17 @@ async def join_case(message: Message, command: CommandObject, state: FSMContext)
 async def my_cases(message: Message):
     async with await get_db() as db:
         cursor = await db.execute(
-            "SELECT title, join_code, status FROM cases WHERE participant_a_user_id = ? OR participant_b_user_id = ? ORDER BY created_at DESC LIMIT 10",
+            "SELECT title, conflict_period, join_code, status FROM cases WHERE participant_a_user_id = ? OR participant_b_user_id = ? ORDER BY created_at DESC LIMIT 10",
             (message.from_user.id, message.from_user.id),
         )
         rows = await cursor.fetchall()
     if not rows:
         await message.answer("У тебя пока нет кейсов.")
         return
-    lines = [f"• {title} — {status} — code `{code}`" for title, code, status in rows]
+    lines = []
+    for title, conflict_period, code, status in rows:
+        period = f" ({conflict_period})" if conflict_period else ""
+        lines.append(f"• {title}{period} — {status} — code `{code}`")
     await message.answer("Твои кейсы:\n" + "\n".join(lines), parse_mode="Markdown")
 
 
@@ -129,14 +169,21 @@ async def handle_intake_answer(message: Message, state: FSMContext):
             "INSERT INTO intake_answers (case_id, user_id, role, question_key, answer_text, created_at) VALUES (?, ?, ?, ?, ?, ?)",
             (case_id, message.from_user.id, role, question_key, message.text.strip(), await now_iso()),
         )
+        if question_key == "conflict_date":
+            await db.execute(
+                "UPDATE cases SET conflict_period = COALESCE(conflict_period, ?), updated_at = ? WHERE id = ?",
+                (message.text.strip(), await now_iso(), case_id),
+            )
         await db.commit()
     idx += 1
     if idx < len(QUESTIONS):
         await state.update_data(question_index=idx)
+        await message.answer(THINKING_NEXT_QUESTION)
         await message.answer(QUESTIONS[idx][1])
         return
     await state.clear()
     await message.answer("Спасибо. Твоя позиция записана.")
+    await message.answer(THINKING_ANALYSIS)
     await maybe_finalize_case(case_id)
 
 
@@ -148,13 +195,13 @@ async def maybe_finalize_case(case_id: str):
         )
         answers = await cursor.fetchall()
         cursor = await db.execute(
-            "SELECT participant_a_user_id, participant_b_user_id, title FROM cases WHERE id = ?",
+            "SELECT participant_a_user_id, participant_b_user_id, title, conflict_period FROM cases WHERE id = ?",
             (case_id,),
         )
         case_row = await cursor.fetchone()
     if not case_row:
         return
-    a_id, b_id, title = case_row
+    a_id, b_id, title, conflict_period = case_row
     grouped = {"A": [], "B": []}
     for role, qkey, text in answers:
         grouped[role].append(f"{qkey}: {text}")
@@ -182,7 +229,7 @@ async def maybe_finalize_case(case_id: str):
         )
         await db.commit()
     report = (
-        f"Кейс: {title}\n\n"
+        f"{format_case_header(title, conflict_period)}\n\n"
         f"Позиция A:\n{analysis['summary_a']}\n\n"
         f"Позиция B:\n{analysis['summary_b']}\n\n"
         f"Общее:\n{analysis['common_ground']}\n\n"
